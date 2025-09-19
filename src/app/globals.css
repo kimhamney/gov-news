@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  background: theme(colors.surface);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+:root {
+  --brand: #12d1b5;
+  --bg-app: #f6f8fb;
+  --card: #ffffff;
+  --line: #e6e9ef;
+  --muted: #6b7280;
+  --text: #0f172a;
+  --accent: #ff7a00;
+}
+
+body {
+  background: var(--bg-app);
+  color: var(--text);
+}
+
+.text-brand {
+  color: var(--brand);
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 2px 12px rgba(16, 24, 40, 0.04);
+}
+
+.segment {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+.segment > button {
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #475569;
+}
+.segment > button[aria-pressed="true"] {
+  background: var(--brand);
+  color: #fff;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  transition: 0.15s ease;
+}
+.btn-ghost {
+  background: #fff;
+  border: 1px solid var(--line);
+  color: #0f172a;
+}
+.btn-ghost:hover {
+  background: #f8fafc;
+}
+.btn-brand {
+  background: var(--brand);
+  color: #fff;
+}
+.btn-brand:hover {
+  filter: brightness(0.95);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-fadeIn {
+  animation: fadeIn 0.18s ease-out;
+}
