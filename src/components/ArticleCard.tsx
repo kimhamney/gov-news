@@ -34,7 +34,6 @@ function CountPill({
       <span className="tabular-nums">{count}</span>
     </span>
   );
-
   if (asButton) {
     return (
       <button
@@ -120,7 +119,6 @@ export default function ArticleCard({
             </p>
           )}
           <div className="pt-1 flex items-center gap-2">
-            {/* Share */}
             <button
               onClick={share}
               className="inline-flex items-center gap-1.5 text-[12px] text-slate-700 px-2.5 py-1 rounded-lg border hover:opacity-80 transition-opacity"
@@ -129,21 +127,12 @@ export default function ArticleCard({
               <Share2 className="w-4 h-4" />
               Share
             </button>
-
-            {/* Scrap */}
-            <ScrapButton articleId={a.id} size="sm" />
-
-            {/* Comments */}
-            {onCommentsClick && (
-              <button
-                onClick={onCommentsClick}
-                className="inline-flex items-center gap-1.5 text-[12px] text-slate-700 px-2.5 py-1 rounded-lg border hover:opacity-80 transition-opacity"
-                style={{ borderColor: "var(--line)" }}
-              >
-                <MessageSquare className="w-4 h-4" />
-                {count}
-              </button>
+            {onCommentsClick ? (
+              <CountPill asButton onClick={onCommentsClick} count={count} />
+            ) : (
+              <CountPill count={count} />
             )}
+            <ScrapButton articleId={a.id} size="sm" />
           </div>
         </div>
       </article>
@@ -155,11 +144,6 @@ export default function ArticleCard({
       <div className="absolute right-3 top-3 z-10">
         <ScrapButton articleId={a.id} size="sm" />
       </div>
-
-      <div className="absolute right-3 bottom-3 z-10">
-        <CountPill count={count} />
-      </div>
-
       <Link
         href={`/articles/${encodeURIComponent(a.id)}`}
         className="flex gap-3 md:gap-4"
@@ -175,19 +159,17 @@ export default function ArticleCard({
             GOVNEWS
           </div>
         )}
-        <div className="min-w-0 flex-1 pr-16 md:pr-20 pb-6">
-          <h3 className="text-[15px] md:text-[16px] font-semibold leading-snug line-clamp-2">
+        <div className="min-w-0 flex-1 pr-16 md:pr-20">
+          <h3 className="text-[15px] md:text-[16px] font-semibold leading-snug break-words">
             {title}
           </h3>
           {summary && (
-            <p className="mt-1 text-[12px] text-slate-600 leading-5 line-clamp-2">
+            <p className="mt-1 hidden md:block text-[12px] text-slate-600 leading-5">
               {summary}
             </p>
           )}
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-            <span className="px-2 py-0.5 rounded-full bg-slate-100">
-              Canada BC
-            </span>
+            <span className="py-0.5 rounded-full bg-slate-100">Canada BC</span>
             {a.published_at && <span>{fmt(a.published_at)}</span>}
           </div>
         </div>
