@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useLocaleMode } from "@/lib/localePref";
 import { Article } from "@/types/article";
 import { MessageSquare } from "lucide-react";
@@ -27,6 +28,18 @@ export default function ArticleCard({
   onCommentsClick?: () => void;
 }) {
   if (!a) return null;
+
+  const [count, setCount] = useState(commentCount);
+  useEffect(() => setCount(commentCount), [commentCount]);
+  useEffect(() => {
+    const onCount = (e: Event) => {
+      const ev = e as CustomEvent<{ articleId: string; count: number }>;
+      if (ev.detail?.articleId === a.id) setCount(ev.detail.count);
+    };
+    window.addEventListener("replies:count", onCount as EventListener);
+    return () =>
+      window.removeEventListener("replies:count", onCount as EventListener);
+  }, [a.id]);
 
   const { mode } = useLocaleMode();
   const title =
@@ -61,7 +74,7 @@ export default function ArticleCard({
                 style={{ borderColor: "var(--line)" }}
               >
                 <MessageSquare className="w-4 h-4" />
-                {commentCount}
+                {count}
               </button>
             )}
           </div>
@@ -144,7 +157,7 @@ export default function ArticleCard({
               className="ml-auto px-2 py-0.5 rounded-full border"
               style={{ borderColor: "var(--line)" }}
             >
-              {commentCount}
+              {count}
             </span>
           </div>
         </div>

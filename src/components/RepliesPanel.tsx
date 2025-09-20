@@ -31,14 +31,13 @@ export default function RepliesPanel({
   const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      const u = data.user;
-      setUserId(u?.id ?? null);
-    });
+    supabase.auth
+      .getUser()
+      .then(({ data }) => setUserId(data.user?.id ?? null));
     const load = async () => {
       if (initialList.length > 0) {
+        setList(initialList);
         setLoading(false);
-        onCountChange?.(initialList.length);
         return;
       }
       setLoading(true);
@@ -47,16 +46,23 @@ export default function RepliesPanel({
         .select("id,user_id,article_id,body,created_at")
         .eq("article_id", articleId)
         .order("created_at", { ascending: false });
-      const arr = (data as Reply[]) ?? [];
-      setList(arr);
+      setList(((data as Reply[]) ?? []) as Reply[]);
       setLoading(false);
-      onCountChange?.(arr.length);
     };
     load();
     const onChanged = () => load();
     window.addEventListener("replies:changed", onChanged);
     return () => window.removeEventListener("replies:changed", onChanged);
-  }, [articleId, initialList, onCountChange]);
+  }, [articleId, initialList]);
+
+  useEffect(() => {
+    onCountChange?.(list.length);
+    window.dispatchEvent(
+      new CustomEvent("replies:count", {
+        detail: { articleId, count: list.length },
+      })
+    );
+  }, [list.length, articleId, onCountChange]);
 
   const submit = async () => {
     if (!userId) {
@@ -70,12 +76,30 @@ export default function RepliesPanel({
     const text = body.trim();
     if (!text) return;
     setSaving(true);
-    await supabase
-      .from("replies")
-      .insert({ article_id: articleId, body: text, user_id: userId });
+    const temp: Reply = {
+      id: `temp-${crypto.randomUUID()}`,
+      user_id: userId,
+      article_id: articleId,
+      body: text,
+      created_at: new Date().toISOString(),
+    };
+    setList((prev) => [temp, ...prev]);
     setBody("");
+
+    const { data, error } = await supabase
+      .from("replies")
+      .insert({ article_id: articleId, body: text, user_id: userId })
+      .select("id,user_id,article_id,body,created_at")
+      .single();
+
     setSaving(false);
-    window.dispatchEvent(new Event("replies:changed"));
+    if (error || !data) {
+      setList((prev) => prev.filter((r) => r.id !== temp.id));
+      return;
+    }
+    setList((prev) =>
+      prev.map((r) => (r.id === temp.id ? (data as Reply) : r))
+    );
   };
 
   const beginEdit = (r: Reply) => {
@@ -91,7 +115,11 @@ export default function RepliesPanel({
     const text = editText.trim();
     if (!text) return;
     setUpdating(true);
-    await supabase
+    const prev = list;
+    setList((cur) =>
+      cur.map((r) => (r.id === editId ? { ...r, body: text } : r))
+    );
+    const { error } = await supabase
       .from("replies")
       .update({ body: text })
       .eq("id", editId)
@@ -99,13 +127,20 @@ export default function RepliesPanel({
     setUpdating(false);
     setEditId(null);
     setEditText("");
-    window.dispatchEvent(new Event("replies:changed"));
+    if (error) setList(prev);
   };
+
   const removeReply = async (id: string) => {
     if (!userId) return;
     if (!window.confirm(t("ui.confirmDelete"))) return;
-    await supabase.from("replies").delete().eq("id", id).eq("user_id", userId);
-    window.dispatchEvent(new Event("replies:changed"));
+    const prev = list;
+    setList((cur) => cur.filter((r) => r.id !== id));
+    const { error } = await supabase
+      .from("replies")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", userId);
+    if (error) setList(prev);
   };
 
   return (
