@@ -33,7 +33,8 @@ type Dict = Record<
   | "ui.update"
   | "ui.updating"
   | "ui.confirmDelete"
-  | "ui.edited",
+  | "ui.edited"
+  | "ui.retry",
   Entry
 >;
 
@@ -78,6 +79,7 @@ const dict: Dict = {
     ko: "이 댓글을 삭제할까요?",
   },
   "ui.edited": { en: "(edited)", ko: "(수정됨)" },
+  "ui.retry": { en: "retry", ko: "재시도" },
 };
 
 function pick(mode: "en" | "ko" | "mix", en: string, ko?: string) {

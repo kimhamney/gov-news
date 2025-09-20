@@ -14,7 +14,9 @@ export default function ProfileTabs() {
   const router = useRouter();
 
   const seedUid =
-    typeof document !== "undefined" ? document.body.dataset.uid || null : null;
+    typeof document !== "undefined"
+      ? (document.body as any).dataset?.uid || null
+      : null;
   const [authReady, setAuthReady] = useState<boolean>(!!seedUid);
   const [userId, setUserId] = useState<string | null>(seedUid);
 
@@ -33,32 +35,57 @@ export default function ProfileTabs() {
   const [loadingReplies, setLoadingReplies] = useState(false);
 
   useEffect(() => {
-    let mounted = true;
+    let canceled = false;
+    let readyTimer: any;
 
-    const initFast = async () => {
-      if (!seedUid) {
-        const { data } = await supabase.auth.getSession();
-        if (!mounted) return;
-        if (data?.session?.user?.id) {
-          setUserId(data.session.user.id);
-          setAuthReady(true);
-        } else {
-          setAuthReady(true);
-        }
+    const resolveUserFast = async () => {
+      if (seedUid && !canceled) {
+        setUserId(seedUid);
+        setAuthReady(true);
+        return;
       }
+      const { data: u1 } = await supabase.auth.getUser();
+      if (!canceled && u1?.user?.id) {
+        setUserId(u1.user.id);
+        setAuthReady(true);
+        return;
+      }
+      const { data: s } = await supabase.auth.getSession();
+      if (!canceled && s?.session?.user?.id) {
+        setUserId(s.session.user.id);
+      }
+      if (!canceled) setAuthReady(true);
     };
 
-    const sub = supabase.auth.onAuthStateChange((_e, session) => {
-      if (!mounted) return;
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      if (canceled) return;
       setUserId(session?.user?.id ?? null);
       setAuthReady(true);
     });
 
-    initFast();
+    readyTimer = setTimeout(() => {
+      if (!canceled) setAuthReady(true);
+    }, 1500);
+
+    const recheck = () => {
+      supabase.auth.getUser().then(({ data }) => {
+        if (!canceled && data?.user?.id) setUserId(data.user.id);
+      });
+    };
+    window.addEventListener("focus", recheck);
+    const vis = () => {
+      if (!document.hidden) recheck();
+    };
+    document.addEventListener("visibilitychange", vis);
+
+    resolveUserFast();
 
     return () => {
-      mounted = false;
-      sub.data.subscription.unsubscribe();
+      canceled = true;
+      clearTimeout(readyTimer);
+      sub?.subscription?.unsubscribe?.();
+      window.removeEventListener("focus", recheck);
+      document.removeEventListener("visibilitychange", vis);
     };
   }, [seedUid]);
 
@@ -96,6 +123,11 @@ export default function ProfileTabs() {
       .then(async ({ data }) => {
         if (!active) return;
         const ids = (data as ScrapRow[] | null)?.map((s) => s.article_id) ?? [];
+        if (ids.length === 0) {
+          setScraps([]);
+          setLoadingScraps(false);
+          return;
+        }
         const list = await Promise.all(
           ids.map(async (id) => {
             const r = await fetch(`/api/articles/${encodeURIComponent(id)}`, {
@@ -173,6 +205,16 @@ export default function ProfileTabs() {
     return (
       <div className="rounded-2xl bg-white border border-slate-100 shadow-card p-6">
         <div className="text-sm text-slate-600">{t("ui.needSignin")}</div>
+        <button
+          onClick={async () => {
+            const { data } = await supabase.auth.getUser();
+            setUserId(data?.user?.id ?? null);
+            setAuthReady(true);
+          }}
+          className="mt-3 px-3 py-1.5 rounded-lg border text-sm"
+        >
+          {t("ui.retry")}
+        </button>
       </div>
     );
 
@@ -347,6 +389,7 @@ function ReplyItem({
     setBusy(false);
     setEditing(false);
   };
+
   const del = async () => {
     if (!self) return;
     if (!window.confirm(t("ui.confirmDelete"))) return;

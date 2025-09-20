@@ -169,7 +169,9 @@ export default function ArticleCard({
             </p>
           )}
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-            <span className="py-0.5 rounded-full bg-slate-100">Canada BC</span>
+            <span className="px-2 py-0.5 rounded-full bg-slate-100">
+              Canada BC
+            </span>
             {a.published_at && <span>{fmt(a.published_at)}</span>}
           </div>
         </div>
