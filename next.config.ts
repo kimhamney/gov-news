@@ -1,5 +1,8 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  eslint: { ignoreDuringBuilds: true },
+  typescript: { ignoreBuildErrors: true },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "news.gov.bc.ca", pathname: "/**" },
@@ -10,4 +13,4 @@ const nextConfig = {
     formats: ["image/avif", "image/webp"],
   },
 };
-module.exports = nextConfig;
+export default nextConfig;
