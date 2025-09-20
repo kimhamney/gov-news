@@ -1,7 +1,7 @@
 export function CardSkeleton() {
   return (
     <li className="relative rounded-2xl bg-white border border-slate-100 shadow-card p-4 animate-pulse">
-      <div className="absolute right-3 top-3 w-7 h-7 md:w-8 md:h-8 rounded-full border border-orange-200" />
+      <div className="absolute right-3 top-3 w-7 h-7 md:w-8 md:h-8 rounded-full border border-slate-200" />
       <div className="flex gap-4">
         <div className="h-20 w-32 rounded-xl bg-slate-100 shrink-0" />
         <div className="min-w-0 flex-1 pr-12 space-y-2">
@@ -18,7 +18,7 @@ export function DetailSkeleton() {
   return (
     <div className="space-y-4">
       <div className="relative rounded-2xl bg-white border border-slate-100 shadow-card overflow-hidden">
-        <div className="absolute right-4 top-4 w-8 h-8 rounded-full border border-orange-200 animate-pulse" />
+        <div className="absolute right-4 top-4 w-8 h-8 rounded-full border border-slate-200 animate-pulse" />
         <div className="w-full h-48 md:h-64 bg-slate-100 animate-pulse" />
         <div className="p-6 space-y-3">
           <div className="h-3 bg-slate-100 rounded w-24" />

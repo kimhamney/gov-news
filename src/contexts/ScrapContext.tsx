@@ -5,89 +5,151 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
-type Ctx = {
+type ScrapContextValue = {
+  ids: Set<string>;
   ready: boolean;
-  userId: string | null;
-  has: (id: string) => boolean;
+  isScrapped: (id: string) => boolean;
   toggle: (id: string) => Promise<void>;
+  add: (id: string) => Promise<void>;
+  remove: (id: string) => Promise<void>;
+  resetFromDb: () => Promise<void>;
 };
 
-const ScrapCtx = createContext<Ctx>({
-  ready: false,
-  userId: null,
-  has: () => false,
-  toggle: async () => {},
-});
+const ScrapContext = createContext<ScrapContextValue | null>(null);
 
-export function ScrapProvider({
-  initialUserId = null,
-  initialScraps = [],
-  children,
-}: {
-  initialUserId?: string | null;
-  initialScraps?: string[];
-  children: React.ReactNode;
-}) {
-  const [userId, setUserId] = useState<string | null>(initialUserId);
-  const [ids, setIds] = useState<Set<string>>(() => new Set(initialScraps));
-  const [ready, setReady] = useState(true);
+export function ScrapProvider({ children }: { children: React.ReactNode }) {
+  const [ids, setIds] = useState<Set<string>>(new Set());
+  const [ready, setReady] = useState(false);
+  const userRef = useRef<string | null>(null);
+  const loadingRef = useRef(false);
 
-  useEffect(() => {
-    const sub = supabase.auth.onAuthStateChange((_e, session) => {
-      const u = session?.user ?? null;
-      setUserId(u?.id ?? null);
-      if (!u) setIds(new Set());
-    });
-    return () => sub.data.subscription.unsubscribe();
+  const fetchUser = async () => {
+    const { data } = await supabase.auth.getUser();
+    userRef.current = data.user?.id ?? null;
+    return userRef.current;
+  };
+
+  const loadFromDb = useCallback(async () => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+    const uid = userRef.current ?? (await fetchUser());
+    if (!uid) {
+      setIds(new Set());
+      setReady(true);
+      loadingRef.current = false;
+      return;
+    }
+    const { data, error } = await supabase
+      .from("scraps")
+      .select("article_id")
+      .eq("user_id", uid);
+    if (!error) {
+      const next = new Set<string>((data ?? []).map((r: any) => r.article_id));
+      setIds(next);
+      setReady(true);
+    } else {
+      setReady(true);
+    }
+    loadingRef.current = false;
   }, []);
 
-  const has = useCallback((id: string) => ids.has(id), [ids]);
+  useEffect(() => {
+    loadFromDb();
+  }, [loadFromDb]);
+
+  useEffect(() => {
+    const sub = supabase.auth.onAuthStateChange(async () => {
+      await fetchUser();
+      await loadFromDb();
+    });
+    return () => {
+      sub.data.subscription.unsubscribe();
+    };
+  }, [loadFromDb]);
+
+  const isScrapped = useCallback((id: string) => ids.has(id), [ids]);
+
+  const add = useCallback(async (id: string) => {
+    const uid = userRef.current ?? (await fetchUser());
+    if (!uid) return;
+    setIds((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+    const { error } = await supabase
+      .from("scraps")
+      .insert({ user_id: uid, article_id: id });
+    if (error) {
+      setIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    } else {
+      window.dispatchEvent(
+        new CustomEvent("scrap:changed", { detail: { id, active: true } })
+      );
+    }
+  }, []);
+
+  const remove = useCallback(async (id: string) => {
+    const uid = userRef.current ?? (await fetchUser());
+    if (!uid) return;
+    setIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    const { error } = await supabase
+      .from("scraps")
+      .delete()
+      .eq("user_id", uid)
+      .eq("article_id", id);
+    if (error) {
+      setIds((prev) => {
+        const next = new Set(prev);
+        next.add(id);
+        return next;
+      });
+    } else {
+      window.dispatchEvent(
+        new CustomEvent("scrap:changed", { detail: { id, active: false } })
+      );
+    }
+  }, []);
 
   const toggle = useCallback(
-    async (articleId: string) => {
-      if (!userId) {
-        const origin = window.location.origin;
-        await supabase.auth.signInWithOAuth({
-          provider: "google",
-          options: { redirectTo: `${origin}/auth/callback` },
-        });
-        return;
-      }
-      setReady(false);
-      if (ids.has(articleId)) {
-        await supabase
-          .from("scraps")
-          .delete()
-          .eq("user_id", userId)
-          .eq("article_id", articleId);
-        setIds((prev) => {
-          const next = new Set(prev);
-          next.delete(articleId);
-          return next;
-        });
-      } else {
-        await supabase
-          .from("scraps")
-          .insert({ user_id: userId, article_id: articleId });
-        setIds((prev) => new Set(prev).add(articleId));
-      }
-      setReady(true);
+    async (id: string) => {
+      if (ids.has(id)) await remove(id);
+      else await add(id);
     },
-    [ids, userId]
+    [ids, add, remove]
   );
+
+  const resetFromDb = useCallback(async () => {
+    await loadFromDb();
+  }, [loadFromDb]);
 
   const value = useMemo(
-    () => ({ ready, userId, has, toggle }),
-    [ready, userId, has, toggle]
+    () => ({ ids, ready, isScrapped, toggle, add, remove, resetFromDb }),
+    [ids, ready, isScrapped, toggle, add, remove, resetFromDb]
   );
 
-  return <ScrapCtx.Provider value={value}>{children}</ScrapCtx.Provider>;
+  return (
+    <ScrapContext.Provider value={value}>{children}</ScrapContext.Provider>
+  );
 }
 
-export function useScraps() {
-  return useContext(ScrapCtx);
+export function useScrap() {
+  const v = useContext(ScrapContext);
+  if (!v) throw new Error("useScrap must be used within ScrapProvider");
+  return v;
 }

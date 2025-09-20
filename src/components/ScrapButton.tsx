@@ -1,44 +1,54 @@
 "use client";
-import { Bookmark } from "lucide-react";
-import { useScraps } from "@/contexts/ScrapContext";
-
-type Size = "sm" | "md" | "lg";
-const sizeMap: Record<Size, string> = {
-  sm: "w-7 h-7",
-  md: "w-8 h-8",
-  lg: "w-10 h-10",
-};
-const iconMap: Record<Size, string> = {
-  sm: "w-4 h-4",
-  md: "w-5 h-5",
-  lg: "w-6 h-6",
-};
+import { useEffect, useMemo, useState } from "react";
+import { useScrap } from "@/contexts/ScrapContext";
+import { Bookmark, BookmarkCheck } from "lucide-react";
 
 export default function ScrapButton({
   articleId,
-  className = "",
   size = "md",
+  className = "",
 }: {
   articleId: string;
+  size?: "sm" | "md" | "lg";
   className?: string;
-  size?: Size;
 }) {
-  const { has, toggle, ready } = useScraps();
-  const scrapped = has(articleId);
+  const { isScrapped, toggle, ready } = useScrap();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const active = mounted && ready ? isScrapped(articleId) : false;
+
+  const dims = useMemo(() => {
+    if (size === "sm") return { btn: "h-8 w-8", icon: "w-4 h-4" };
+    if (size === "lg") return { btn: "h-11 w-11", icon: "w-6 h-6" };
+    return { btn: "h-9 w-9", icon: "w-5 h-5" };
+  }, [size]);
 
   return (
     <button
-      onClick={() => toggle(articleId)}
+      type="button"
+      onClick={async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        await toggle(articleId);
+      }}
+      className={`rounded-full border ${
+        dims.btn
+      } grid place-items-center hover:opacity-80 transition-opacity ${
+        active
+          ? "bg-emerald-50 border-emerald-200"
+          : "bg-white border-[var(--line)]"
+      } ${className}`}
+      aria-pressed={active}
+      aria-label={active ? "Unscrap" : "Scrap"}
+      title={active ? "Remove from Scrap" : "Add to Scrap"}
       disabled={!ready}
-      aria-label={scrapped ? "Saved" : "Save"}
-      className={`inline-flex items-center justify-center rounded-xl border border-transparent hover:border-[var(--line)] bg-transparent ${sizeMap[size]} disabled:opacity-60 ${className}`}
-      style={{ color: scrapped ? "var(--accent)" : "var(--text-muted)" }}
     >
-      <Bookmark
-        className={iconMap[size]}
-        strokeWidth={2}
-        fill={scrapped ? "currentColor" : "none"}
-      />
+      {active ? (
+        <BookmarkCheck className={`${dims.icon} text-emerald-600`} />
+      ) : (
+        <Bookmark className={`${dims.icon} text-slate-700`} />
+      )}
     </button>
   );
 }
