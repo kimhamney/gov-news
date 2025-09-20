@@ -1,18 +1,9 @@
 export const dynamic = "force-dynamic";
 import ArticlesSection from "@/components/ArticlesSection";
+import FeaturedArticle from "@/components/FeaturedArticle";
 import { getBaseUrl } from "@/lib/getBaseUrl";
 import { getServerSupabase } from "@/lib/supabaseServer";
-
-type Article = {
-  id: string;
-  title_en: string;
-  title_ko?: string;
-  summary_en?: string;
-  summary_ko?: string;
-  url?: string;
-  hero_img?: string | null;
-  published_at?: string;
-};
+import type { Article } from "@/types/article";
 
 const fallback: Article[] = [];
 
@@ -67,14 +58,20 @@ export default async function HomePage() {
   const initialScrapIds: string[] = (
     ((scrapsRes as any).data ?? []) as Array<{ article_id: string }>
   ).map((x) => x.article_id);
+  const [featured, ...rest] = items;
 
   return (
-    <main className="mx-auto max-w-5xl p-4 space-y-4">
-      <ArticlesSection
-        items={items}
-        counts={counts}
-        initialScrapIds={initialScrapIds}
-      />
+    <main className="mx-auto max-w-5xl p-4 space-y-6">
+      {featured ? (
+        <FeaturedArticle item={featured} count={counts.get(featured.id) ?? 0} />
+      ) : null}
+      {rest.length ? (
+        <ArticlesSection
+          items={rest}
+          counts={counts}
+          initialScrapIds={initialScrapIds}
+        />
+      ) : null}
     </main>
   );
 }

@@ -7,4 +7,6 @@ export type Article = {
   url: string;
   hero_img?: string | null;
   published_at?: string;
+  content_en?: string;
+  content_ko?: string;
 };
