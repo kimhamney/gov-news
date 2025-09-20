@@ -16,6 +16,39 @@ function fmt(d?: string) {
   )}.${String(t.getDate()).padStart(2, "0")}`;
 }
 
+function CountPill({
+  count,
+  asButton = false,
+  onClick,
+}: {
+  count: number;
+  asButton?: boolean;
+  onClick?: () => void;
+}) {
+  const inner = (
+    <span
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] leading-none text-slate-700 bg-white/90 backdrop-blur-sm"
+      style={{ borderColor: "var(--line)" }}
+    >
+      <MessageSquare className="w-3.5 h-3.5" />
+      <span className="tabular-nums">{count}</span>
+    </span>
+  );
+
+  if (asButton) {
+    return (
+      <button
+        onClick={onClick}
+        className="inline-flex items-center"
+        aria-label={`comments ${count}`}
+      >
+        {inner}
+      </button>
+    );
+  }
+  return inner;
+}
+
 export default function ArticleCard({
   a,
   variant = "list",
@@ -36,9 +69,11 @@ export default function ArticleCard({
       const ev = e as CustomEvent<{ articleId: string; count: number }>;
       if (ev.detail?.articleId === a.id) setCount(ev.detail.count);
     };
-    window.addEventListener("replies:count", onCount as EventListener);
-    return () =>
-      window.removeEventListener("replies:count", onCount as EventListener);
+    if (typeof window !== "undefined") {
+      window.addEventListener("replies:count", onCount as EventListener);
+      return () =>
+        window.removeEventListener("replies:count", onCount as EventListener);
+    }
   }, [a.id]);
 
   const { mode } = useLocaleMode();
@@ -50,9 +85,9 @@ export default function ArticleCard({
   const share = useCallback(async () => {
     const url = typeof window !== "undefined" ? window.location.href : "";
     const text = title || "GOVNEWS";
-    if (navigator.share) {
+    if ((navigator as any).share) {
       try {
-        await navigator.share({ title: text, url });
+        await (navigator as any).share({ title: text, url });
       } catch {}
     } else {
       try {
@@ -84,7 +119,8 @@ export default function ArticleCard({
               {summary}
             </p>
           )}
-          <div className="pt-1 flex items-center justify-start gap-2">
+          <div className="pt-1 flex items-center gap-2">
+            {/* Share */}
             <button
               onClick={share}
               className="inline-flex items-center gap-1.5 text-[12px] text-slate-700 px-2.5 py-1 rounded-lg border hover:opacity-80 transition-opacity"
@@ -93,7 +129,11 @@ export default function ArticleCard({
               <Share2 className="w-4 h-4" />
               Share
             </button>
+
+            {/* Scrap */}
             <ScrapButton articleId={a.id} size="sm" />
+
+            {/* Comments */}
             {onCommentsClick && (
               <button
                 onClick={onCommentsClick}
@@ -115,6 +155,11 @@ export default function ArticleCard({
       <div className="absolute right-3 top-3 z-10">
         <ScrapButton articleId={a.id} size="sm" />
       </div>
+
+      <div className="absolute right-3 bottom-3 z-10">
+        <CountPill count={count} />
+      </div>
+
       <Link
         href={`/articles/${encodeURIComponent(a.id)}`}
         className="flex gap-3 md:gap-4"
@@ -130,7 +175,7 @@ export default function ArticleCard({
             GOVNEWS
           </div>
         )}
-        <div className="min-w-0 flex-1 pr-10 md:pr-14">
+        <div className="min-w-0 flex-1 pr-16 md:pr-20 pb-6">
           <h3 className="text-[15px] md:text-[16px] font-semibold leading-snug line-clamp-2">
             {title}
           </h3>
@@ -144,12 +189,6 @@ export default function ArticleCard({
               Canada BC
             </span>
             {a.published_at && <span>{fmt(a.published_at)}</span>}
-            <span
-              className="ml-auto px-2 py-0.5 rounded-full border"
-              style={{ borderColor: "var(--line)" }}
-            >
-              {count}
-            </span>
           </div>
         </div>
       </Link>
