@@ -3,53 +3,46 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import { useT } from "@/lib/i18n";
-import { useLocaleMode } from "@/lib/localePref";
+import { User as UserIcon } from "lucide-react";
 
 export default function AuthButton() {
   const t = useT();
-  const { mode } = useLocaleMode();
-  const [ready, setReady] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [nick, setNick] = useState<string | null>(null);
+  const seedUid =
+    typeof document !== "undefined" ? document.body.dataset.uid || null : null;
+
+  const [ready, setReady] = useState<boolean>(!!seedUid);
+  const [userId, setUserId] = useState<string | null>(seedUid);
 
   useEffect(() => {
-    let active = true;
-    const load = async () => {
-      const { data } = await supabase.auth.getUser();
-      const u = data.user ?? null;
-      if (!active) return;
-      setUserId(u?.id ?? null);
-      if (u) {
-        const { data: p } = await supabase
-          .from("profiles")
-          .select("nickname,email")
-          .eq("id", u.id)
-          .maybeSingle();
-        setNick(p?.nickname ?? p?.email ?? u.email ?? "");
-      }
-      setReady(true);
-    };
-    load();
-    const sub = supabase.auth.onAuthStateChange(async (_e, session) => {
-      const u = session?.user ?? null;
-      setUserId(u?.id ?? null);
-      if (u) {
-        const { data: p } = await supabase
-          .from("profiles")
-          .select("nickname,email")
-          .eq("id", u.id)
-          .maybeSingle();
-        setNick(p?.nickname ?? p?.email ?? u.email ?? "");
-      } else {
-        setNick(null);
-      }
+    let didInit = false;
+    const sub = supabase.auth.onAuthStateChange(async (_event, session) => {
+      didInit = true;
+      const sid = session?.user?.id ?? null;
+      setUserId(sid);
       setReady(true);
     });
+
+    (async () => {
+      if (seedUid) return;
+      const { data } = await supabase.auth.getSession();
+      if (data?.session) {
+        setUserId(data.session.user.id);
+        setReady(true);
+      } else {
+        setReady(true);
+      }
+      if (!didInit) {
+        setTimeout(async () => {
+          const { data: u } = await supabase.auth.getUser();
+          if (u?.user?.id && !userId) setUserId(u.user.id);
+        }, 0);
+      }
+    })();
+
     return () => {
-      active = false;
       sub.data.subscription.unsubscribe();
     };
-  }, []);
+  }, [seedUid, userId]);
 
   const signIn = async () => {
     const origin = window.location.origin;
@@ -59,35 +52,24 @@ export default function AuthButton() {
     });
   };
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
-  };
-
   if (!ready) return null;
 
-  if (!userId)
+  if (!userId) {
     return (
       <button onClick={signIn} className="btn btn-ghost animate-fadeIn">
         {t("ui.login")}
       </button>
     );
-
-  if (userId && !nick) return null;
+  }
 
   return (
-    <div className="flex items-center gap-3 animate-fadeIn">
-      <div className="hidden sm:block text-[11px] leading-4 text-slate-500 text-right">
-        {mode === "en" ? `hi, ${nick}!` : `안녕하세요, ${nick}!`}
-      </div>
-      <Link
-        href="/me"
-        className="text-sm text-slate-700 hover:underline max-w-[140px] truncate"
-      >
-        {nick}
-      </Link>
-      <button onClick={signOut} className="btn btn-ghost">
-        {t("ui.logout")}
-      </button>
-    </div>
+    <Link
+      href="/me"
+      className="w-8 h-8 rounded-full bg-[var(--brand)] flex items-center justify-center hover:opacity-80 transition-opacity animate-fadeIn"
+      aria-label="Go to profile"
+      title="Go to profile"
+    >
+      <UserIcon className="w-5 h-5 text-white" />
+    </Link>
   );
 }

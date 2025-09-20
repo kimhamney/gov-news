@@ -5,52 +5,93 @@ import { Profile } from "@/types/profile";
 import { Article } from "@/types/article";
 import Link from "next/link";
 import { useT } from "@/lib/i18n";
+import { useRouter } from "next/navigation";
 
 type ScrapRow = { article_id: string; created_at: string };
 
 export default function ProfileTabs() {
   const t = useT();
+  const router = useRouter();
+
+  const seedUid =
+    typeof document !== "undefined" ? document.body.dataset.uid || null : null;
+  const [authReady, setAuthReady] = useState<boolean>(!!seedUid);
+  const [userId, setUserId] = useState<string | null>(seedUid);
+
   const [tab, setTab] = useState<"profile" | "scraps" | "replies">("profile");
-  const [userId, setUserId] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [nickname, setNickname] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   const [scraps, setScraps] = useState<Article[]>([]);
   const [loadingScraps, setLoadingScraps] = useState(false);
+
   const [replies, setReplies] = useState<
     Array<{ id: string; article_id: string; body: string; created_at: string }>
   >([]);
   const [loadingReplies, setLoadingReplies] = useState(false);
 
   useEffect(() => {
-    let active = true;
-    supabase.auth.getUser().then(async ({ data }) => {
-      if (!active) return;
-      const u = data.user;
-      if (!u) return;
-      setUserId(u.id);
-      setEmail(u.email ?? "");
-      const { data: p } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", u.id)
-        .maybeSingle<Profile>();
-      if (p) setNickname(p.nickname);
+    let mounted = true;
+
+    const initFast = async () => {
+      if (!seedUid) {
+        const { data } = await supabase.auth.getSession();
+        if (!mounted) return;
+        if (data?.session?.user?.id) {
+          setUserId(data.session.user.id);
+          setAuthReady(true);
+        } else {
+          setAuthReady(true);
+        }
+      }
+    };
+
+    const sub = supabase.auth.onAuthStateChange((_e, session) => {
+      if (!mounted) return;
+      setUserId(session?.user?.id ?? null);
+      setAuthReady(true);
     });
+
+    initFast();
+
+    return () => {
+      mounted = false;
+      sub.data.subscription.unsubscribe();
+    };
+  }, [seedUid]);
+
+  useEffect(() => {
+    let active = true;
+    const loadProfile = async () => {
+      if (!userId) return;
+      const [{ data: u }, { data: p }] = await Promise.all([
+        supabase.auth.getUser(),
+        supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", userId)
+          .maybeSingle<Profile>(),
+      ]);
+      if (!active) return;
+      setEmail(u.user?.email ?? "");
+      if (p?.nickname) setNickname(p.nickname);
+    };
+    loadProfile();
     return () => {
       active = false;
     };
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
-    if (!userId) return;
-    if (tab !== "scraps") return;
+    if (!userId || tab !== "scraps") return;
     let active = true;
     setLoadingScraps(true);
     supabase
       .from("scraps")
       .select("article_id,created_at")
+      .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .then(async ({ data }) => {
         if (!active) return;
@@ -74,14 +115,19 @@ export default function ProfileTabs() {
   }, [tab, userId]);
 
   useEffect(() => {
-    if (!userId) return;
-    if (tab !== "replies") return;
+    if (!userId || tab !== "replies") return;
     let active = true;
     setLoadingReplies(true);
     supabase
       .from("replies")
       .select("id,article_id,user_id,body,created_at")
-      .order("created_at", { ascending: false });
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .then(({ data }) => {
+        if (!active) return;
+        setReplies((data as any) ?? []);
+        setLoadingReplies(false);
+      });
     return () => {
       active = false;
     };
@@ -107,6 +153,21 @@ export default function ProfileTabs() {
     setSaving(false);
     window.dispatchEvent(new Event("profile:created"));
   };
+
+  const signOut = async () => {
+    setUserId(null);
+    await supabase.auth.signOut();
+    router.refresh();
+  };
+
+  if (!authReady) {
+    return (
+      <div className="rounded-2xl bg-white border border-slate-100 shadow-card p-6">
+        <div className="h-4 w-28 bg-slate-100 rounded animate-pulse mb-4" />
+        <div className="h-10 w-full bg-slate-100 rounded-xl animate-pulse" />
+      </div>
+    );
+  }
 
   if (!userId)
     return (
@@ -175,13 +236,21 @@ export default function ProfileTabs() {
             </label>
           </div>
           {error && <div className="text-sm text-red-600">{error}</div>}
-          <button
-            onClick={save}
-            disabled={disabled}
-            className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm hover:opacity-90 disabled:opacity-60"
-          >
-            {saving ? t("ui.saving") : t("ui.save")}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={save}
+              disabled={disabled}
+              className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm hover:opacity-90 disabled:opacity-60"
+            >
+              {saving ? t("ui.saving") : t("ui.save")}
+            </button>
+            <button
+              onClick={signOut}
+              className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 text-sm hover:opacity-90"
+            >
+              Logout
+            </button>
+          </div>
         </div>
       )}
 
@@ -294,24 +363,20 @@ function ReplyItem({
         >
           {t("ui.goToArticle")}
         </Link>
-        {self && (
+        {self && !editing && (
           <div className="flex items-center gap-2">
-            {!editing && (
-              <>
-                <button
-                  onClick={() => setEditing(true)}
-                  className="text-xs text-slate-500 hover:text-slate-700"
-                >
-                  {t("ui.edit")}
-                </button>
-                <button
-                  onClick={del}
-                  className="text-xs text-red-500 hover:text-red-600"
-                >
-                  {t("ui.delete")}
-                </button>
-              </>
-            )}
+            <button
+              onClick={() => setEditing(true)}
+              className="text-xs text-slate-500 hover:text-slate-700"
+            >
+              {t("ui.edit")}
+            </button>
+            <button
+              onClick={del}
+              className="text-xs text-red-500 hover:text-red-600"
+            >
+              {t("ui.delete")}
+            </button>
           </div>
         )}
       </div>

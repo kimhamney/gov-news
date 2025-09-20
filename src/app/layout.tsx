@@ -3,6 +3,7 @@ import TopBar from "@/components/TopBar";
 import GlobalLocaleSwitcher from "@/components/GlobalLocaleSwitcher";
 import { LocaleProvider, Mode } from "@/lib/localePref";
 import { cookies } from "next/headers";
+import { getServerSupabase } from "@/lib/supabaseServer";
 import { ScrapProvider } from "@/contexts/ScrapContext";
 
 export const metadata = { title: "GOVNEWS" };
@@ -16,9 +17,14 @@ export default async function RootLayout({
   const raw = jar.get("localeMode")?.value || "en";
   const initialMode: Mode = raw === "ko" ? "ko" : "en";
 
+  const supabase = await getServerSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   return (
     <html lang="en">
-      <body>
+      <body data-uid={user?.id ?? ""}>
         <LocaleProvider initialMode={initialMode}>
           <ScrapProvider>
             <TopBar />

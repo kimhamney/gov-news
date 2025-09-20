@@ -40,11 +40,6 @@ export default function FeaturedArticle({
             {item.title_ko || item.title_en}
           </h2>
         </Link>
-        {(item.summary_ko || item.summary_en) && (
-          <p className="mt-2 text-[15px] leading-relaxed text-gray-700">
-            {item.summary_ko || item.summary_en}
-          </p>
-        )}
         <div className="mt-3 flex items-center gap-3 text-sm text-gray-500">
           {item.published_at && <span>{fmt(item.published_at)}</span>}
           <span>·</span>

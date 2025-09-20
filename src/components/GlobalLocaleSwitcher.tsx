@@ -1,4 +1,3 @@
-// src/components/GlobalLocaleSwitcher.tsx
 "use client";
 import { useLocaleMode } from "@/lib/localePref";
 

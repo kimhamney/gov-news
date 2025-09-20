@@ -15,7 +15,7 @@ export default function TopBar() {
         >
           GOVNEWS
         </Link>
-        <div className="flex items-center gap-2">
+        <div className="min-w-[140px] flex justify-end">
           <AuthButton />
         </div>
       </div>
