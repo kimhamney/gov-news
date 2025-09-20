@@ -1,8 +1,9 @@
 "use client";
 import Link from "next/link";
+import { useEffect, useState, useCallback } from "react";
 import { useLocaleMode } from "@/lib/localePref";
 import { Article } from "@/types/article";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, Share2 } from "lucide-react";
 import ScrapButton from "@/components/ScrapButton";
 
 function fmt(d?: string) {
@@ -28,11 +29,37 @@ export default function ArticleCard({
 }) {
   if (!a) return null;
 
+  const [count, setCount] = useState(commentCount);
+  useEffect(() => setCount(commentCount), [commentCount]);
+  useEffect(() => {
+    const onCount = (e: Event) => {
+      const ev = e as CustomEvent<{ articleId: string; count: number }>;
+      if (ev.detail?.articleId === a.id) setCount(ev.detail.count);
+    };
+    window.addEventListener("replies:count", onCount as EventListener);
+    return () =>
+      window.removeEventListener("replies:count", onCount as EventListener);
+  }, [a.id]);
+
   const { mode } = useLocaleMode();
   const title =
     mode === "ko" ? a.title_ko ?? a.title_en : a.title_en ?? a.title_ko;
   const summary =
     mode === "ko" ? a.summary_ko ?? a.summary_en : a.summary_en ?? a.summary_ko;
+
+  const share = useCallback(async () => {
+    const url = typeof window !== "undefined" ? window.location.href : "";
+    const text = title || "GOVNEWS";
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: text, url });
+      } catch {}
+    } else {
+      try {
+        await navigator.clipboard.writeText(url);
+      } catch {}
+    }
+  }, [title]);
 
   if (variant === "detail") {
     return (
@@ -48,26 +75,7 @@ export default function ArticleCard({
             GOVNEWS
           </div>
         )}
-        <div className="p-4 sm:p-5 md:p-6 space-y-3 sm:space-y-4">
-          <div className="flex flex-wrap items-center gap-2 text-[11px] sm:text-[12px] text-slate-500">
-            <span className="px-2 py-0.5 rounded-full bg-slate-100">
-              Canada BC
-            </span>
-            {a.published_at && <span>{fmt(a.published_at)}</span>}
-            <div className="ml-auto flex items-center gap-2">
-              <ScrapButton articleId={a.id} size="sm" />
-              {onCommentsClick && (
-                <button
-                  onClick={onCommentsClick}
-                  className="inline-flex items-center gap-1.5 text-[12px] text-slate-700 px-2.5 py-1 rounded-lg border hover:bg-slate-50"
-                  style={{ borderColor: "var(--line)" }}
-                >
-                  <MessageSquare className="w-4 h-4" />
-                  {commentCount}
-                </button>
-              )}
-            </div>
-          </div>
+        <div className="p-4 sm:p-5 md:p-6 space-y-4">
           <h1 className="text-[22px] sm:text-[24px] md:text-[28px] font-extrabold leading-snug tracking-[-0.2px]">
             {title}
           </h1>
@@ -76,34 +84,27 @@ export default function ArticleCard({
               {summary}
             </p>
           )}
-          {a.url && (
-            <a
-              href={a.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-sm text-brand"
+          <div className="pt-1 flex items-center justify-start gap-2">
+            <button
+              onClick={share}
+              className="inline-flex items-center gap-1.5 text-[12px] text-slate-700 px-2.5 py-1 rounded-lg border hover:opacity-80 transition-opacity"
+              style={{ borderColor: "var(--line)" }}
             >
-              Open original
-              <svg width="16" height="16" viewBox="0 0 24 24">
-                <path
-                  d="M14 3h7v7m0-7L10 14"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M21 13v7H3V3h7"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </a>
-          )}
+              <Share2 className="w-4 h-4" />
+              Share
+            </button>
+            <ScrapButton articleId={a.id} size="sm" />
+            {onCommentsClick && (
+              <button
+                onClick={onCommentsClick}
+                className="inline-flex items-center gap-1.5 text-[12px] text-slate-700 px-2.5 py-1 rounded-lg border hover:opacity-80 transition-opacity"
+                style={{ borderColor: "var(--line)" }}
+              >
+                <MessageSquare className="w-4 h-4" />
+                {count}
+              </button>
+            )}
+          </div>
         </div>
       </article>
     );
@@ -147,7 +148,7 @@ export default function ArticleCard({
               className="ml-auto px-2 py-0.5 rounded-full border"
               style={{ borderColor: "var(--line)" }}
             >
-              {commentCount}
+              {count}
             </span>
           </div>
         </div>
