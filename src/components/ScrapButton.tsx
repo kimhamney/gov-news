@@ -1,4 +1,5 @@
 "use client";
+import { Bookmark } from "lucide-react";
 import { useScraps } from "@/contexts/ScrapContext";
 
 type Size = "sm" | "md" | "lg";
@@ -30,30 +31,14 @@ export default function ScrapButton({
       onClick={() => toggle(articleId)}
       disabled={!ready}
       aria-label={scrapped ? "Saved" : "Save"}
-      className={`grid place-items-center rounded-full ${sizeMap[size]} disabled:opacity-60 ${className}`}
-      style={{
-        border: `1px solid var(--accent)`,
-        color: scrapped ? "#fff" : "var(--accent)",
-        background: scrapped ? "var(--accent)" : "#fff",
-      }}
+      className={`inline-flex items-center justify-center rounded-xl border border-transparent hover:border-[var(--line)] bg-transparent ${sizeMap[size]} disabled:opacity-60 ${className}`}
+      style={{ color: scrapped ? "var(--accent)" : "var(--text-muted)" }}
     >
-      <svg
-        viewBox="0 0 24 24"
-        className={`${iconMap[size]} pointer-events-none`}
-      >
-        <path
-          d="M6 3h12a1 1 0 0 1 1 1v16l-7-4-7 4V4a1 1 0 0 1 1-1z"
-          fill="currentColor"
-          style={{ opacity: scrapped ? 1 : 0 }}
-        />
-        <path
-          d="M6 3h12a1 1 0 0 1 1 1v16l-7-4-7 4V4a1 1 0 0 1 1-1z"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinejoin="round"
-        />
-      </svg>
+      <Bookmark
+        className={iconMap[size]}
+        strokeWidth={2}
+        fill={scrapped ? "currentColor" : "none"}
+      />
     </button>
   );
 }

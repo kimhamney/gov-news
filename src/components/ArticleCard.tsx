@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useLocaleMode } from "@/lib/localePref";
 import { Article } from "@/types/article";
+import { MessageSquare } from "lucide-react";
 import ScrapButton from "@/components/ScrapButton";
 
 function fmt(d?: string) {
@@ -18,10 +19,12 @@ export default function ArticleCard({
   a,
   variant = "list",
   commentCount = 0,
+  onCommentsClick,
 }: {
   a?: Article;
   variant?: "list" | "detail";
   commentCount?: number;
+  onCommentsClick?: () => void;
 }) {
   if (!a) return null;
 
@@ -33,33 +36,42 @@ export default function ArticleCard({
 
   if (variant === "detail") {
     return (
-      <article className="relative card overflow-hidden">
-        <div className="absolute right-4 top-4 z-10">
-          <ScrapButton articleId={a.id} size="md" />
-        </div>
+      <article className="card overflow-hidden rounded-3xl">
         {a.hero_img ? (
           <img
             src={a.hero_img}
             alt=""
-            className="w-full h-48 md:h-56 object-cover"
+            className="w-full aspect-[16/9] sm:aspect-[21/9] md:aspect-[2/1] object-cover"
           />
         ) : (
-          <div className="w-full h-40 bg-slate-100 grid place-items-center text-slate-400 text-xs">
+          <div className="w-full aspect-[16/9] bg-slate-100 grid place-items-center text-slate-400 text-xs">
             GOVNEWS
           </div>
         )}
-        <div className="p-5 md:p-6 space-y-3">
-          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+        <div className="p-4 sm:p-5 md:p-6 space-y-3 sm:space-y-4">
+          <div className="flex flex-wrap items-center gap-2 text-[11px] sm:text-[12px] text-slate-500">
             <span className="px-2 py-0.5 rounded-full bg-slate-100">
               Canada BC
             </span>
             {a.published_at && <span>{fmt(a.published_at)}</span>}
+            {onCommentsClick && (
+              <button
+                onClick={onCommentsClick}
+                className="ml-auto inline-flex items-center gap-1.5 text-[12px] text-slate-700 px-2.5 py-1 rounded-lg border hover:bg-slate-50"
+                style={{ borderColor: "var(--line)" }}
+              >
+                <MessageSquare className="w-4 h-4" />
+                {commentCount}
+              </button>
+            )}
           </div>
-          <h1 className="text-[22px] md:text-[26px] font-extrabold leading-snug tracking-[-0.2px]">
+          <h1 className="text-[22px] sm:text-[24px] md:text-[28px] font-extrabold leading-snug tracking-[-0.2px]">
             {title}
           </h1>
           {summary && (
-            <p className="text-[14px] text-slate-700 leading-7">{summary}</p>
+            <p className="text-[14px] sm:text-[15px] text-slate-700 leading-7">
+              {summary}
+            </p>
           )}
           {a.url && (
             <a
@@ -95,7 +107,7 @@ export default function ArticleCard({
   }
 
   return (
-    <li className="relative card p-3 md:p-4 hover:shadow-md transition">
+    <li className="relative card p-3 md:p-4 hover:shadow-md transition rounded-2xl">
       <div className="absolute right-3 top-3 z-10">
         <ScrapButton articleId={a.id} size="sm" />
       </div>

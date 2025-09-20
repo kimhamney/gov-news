@@ -14,9 +14,11 @@ type Reply = {
 export default function RepliesPanel({
   articleId,
   initialList = [],
+  onCountChange,
 }: {
   articleId: string;
   initialList?: Reply[];
+  onCountChange?: (n: number) => void;
 }) {
   const t = useT();
   const [userId, setUserId] = useState<string | null>(null);
@@ -36,6 +38,7 @@ export default function RepliesPanel({
     const load = async () => {
       if (initialList.length > 0) {
         setLoading(false);
+        onCountChange?.(initialList.length);
         return;
       }
       setLoading(true);
@@ -44,14 +47,16 @@ export default function RepliesPanel({
         .select("id,user_id,article_id,body,created_at")
         .eq("article_id", articleId)
         .order("created_at", { ascending: false });
-      setList((data as Reply[]) ?? []);
+      const arr = (data as Reply[]) ?? [];
+      setList(arr);
       setLoading(false);
+      onCountChange?.(arr.length);
     };
     load();
     const onChanged = () => load();
     window.addEventListener("replies:changed", onChanged);
     return () => window.removeEventListener("replies:changed", onChanged);
-  }, [articleId, initialList]);
+  }, [articleId, initialList, onCountChange]);
 
   const submit = async () => {
     if (!userId) {
@@ -77,12 +82,10 @@ export default function RepliesPanel({
     setEditId(r.id);
     setEditText(r.body);
   };
-
   const cancelEdit = () => {
     setEditId(null);
     setEditText("");
   };
-
   const applyEdit = async () => {
     if (!editId || !userId) return;
     const text = editText.trim();
@@ -98,7 +101,6 @@ export default function RepliesPanel({
     setEditText("");
     window.dispatchEvent(new Event("replies:changed"));
   };
-
   const removeReply = async (id: string) => {
     if (!userId) return;
     if (!window.confirm(t("ui.confirmDelete"))) return;

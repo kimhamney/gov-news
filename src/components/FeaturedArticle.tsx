@@ -1,16 +1,16 @@
 import Link from "next/link";
 import Image from "next/image";
+import { Article } from "@/types/article";
 
-type Article = {
-  id: string;
-  title_en: string;
-  title_ko?: string;
-  summary_en?: string;
-  summary_ko?: string;
-  url?: string;
-  hero_img?: string | null;
-  published_at?: string;
-};
+function fmt(d?: string) {
+  if (!d) return "";
+  const t = new Date(d);
+  if (isNaN(t.getTime())) return "";
+  return `${t.getFullYear()}.${String(t.getMonth() + 1).padStart(
+    2,
+    "0"
+  )}.${String(t.getDate()).padStart(2, "0")}`;
+}
 
 export default function FeaturedArticle({
   item,
@@ -46,9 +46,7 @@ export default function FeaturedArticle({
           </p>
         )}
         <div className="mt-3 flex items-center gap-3 text-sm text-gray-500">
-          {item.published_at ? (
-            <time dateTime={item.published_at}>{item.published_at}</time>
-          ) : null}
+          {item.published_at && <span>{fmt(item.published_at)}</span>}
           <span>·</span>
           <span>{count} comments</span>
         </div>

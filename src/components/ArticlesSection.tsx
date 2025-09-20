@@ -2,6 +2,7 @@
 import { useMemo } from "react";
 import ArticleCard from "@/components/ArticleCard";
 import { Article } from "@/types/article";
+import { ScrapProvider } from "@/contexts/ScrapContext";
 
 export default function ArticlesSection({
   items,
@@ -23,12 +24,18 @@ export default function ArticlesSection({
   }, [items]);
 
   return (
-    <section className="space-y-3">
-      <ul className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-        {data.map((a) => (
-          <ArticleCard key={a.id} a={a} commentCount={counts?.get(a.id) ?? 0} />
-        ))}
-      </ul>
-    </section>
+    <ScrapProvider initialIds={initialScrapIds}>
+      <section className="space-y-3">
+        <ul className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+          {data.map((a) => (
+            <ArticleCard
+              key={a.id}
+              a={a}
+              commentCount={counts?.get(a.id) ?? 0}
+            />
+          ))}
+        </ul>
+      </section>
+    </ScrapProvider>
   );
 }

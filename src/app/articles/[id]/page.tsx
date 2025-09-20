@@ -1,9 +1,8 @@
 export const dynamic = "force-dynamic";
 import { getBaseUrl } from "@/lib/getBaseUrl";
-import ArticleCard from "@/components/ArticleCard";
-import RepliesPanel from "@/components/RepliesPanel";
 import { Article } from "@/types/article";
 import { getServerSupabase } from "@/lib/supabaseServer";
+import DetailClient from "./DetailClient";
 
 export default async function ArticlePage({
   params,
@@ -26,7 +25,7 @@ export default async function ArticlePage({
 
   const { item } = (await itemRes.json()) as { item: Article };
 
-  const [{ data: userData }, repliesRes] = await Promise.all([
+  const [{ data: _user }, repliesRes] = await Promise.all([
     supabase.auth.getUser(),
     supabase
       .from("replies")
@@ -38,9 +37,8 @@ export default async function ArticlePage({
   const initialReplies = (repliesRes.data as any[]) ?? [];
 
   return (
-    <main className="mx-auto max-w-5xl p-4 space-y-4">
-      <ArticleCard a={item} variant="detail" />
-      <RepliesPanel articleId={item.id} initialList={initialReplies} />
+    <main className="mx-auto max-w-5xl p-4">
+      <DetailClient item={item} initialReplies={initialReplies} />
     </main>
   );
 }
