@@ -438,7 +438,7 @@ async function findUnsplash(query) {
     const res = await axios.get("https://api.unsplash.com/search/photos", {
       params: {
         query,
-        per_page: 3, // 더 많은 결과를 요청
+        per_page: 3,
         orientation: "landscape",
         content_filter: "high",
       },
@@ -447,7 +447,7 @@ async function findUnsplash(query) {
         "Accept-Version": "v1",
         "User-Agent": UA,
       },
-      timeout: 15000, // 타임아웃 증가
+      timeout: 15000,
     });
 
     console.log(`Unsplash API response status: ${res.status}`);
@@ -460,11 +460,9 @@ async function findUnsplash(query) {
       return null;
     }
 
-    // 첫 번째 결과를 사용
     const photo = photos[0];
     console.log(`Selected photo ID: ${photo.id}`);
 
-    // 다운로드 통계를 위한 요청 (선택사항)
     const dl = photo?.links?.download_location;
     if (dl) {
       try {
@@ -478,7 +476,6 @@ async function findUnsplash(query) {
       }
     }
 
-    // 이미지 URL 생성 (여러 옵션 시도)
     const rawUrl =
       photo?.urls?.raw || photo?.urls?.full || photo?.urls?.regular;
     if (!rawUrl) {
@@ -486,7 +483,6 @@ async function findUnsplash(query) {
       return null;
     }
 
-    // 고품질 이미지 URL 생성
     const heroUrl = `${rawUrl}&w=1600&h=900&q=80&auto=format&fit=crop`;
     console.log(`Generated hero URL: ${heroUrl}`);
 
@@ -499,7 +495,6 @@ async function findUnsplash(query) {
       console.warn("Response data:", error.response.data);
     }
 
-    // API 오류 시 캐시에 null 저장하여 재시도 방지
     unsplashCache.set(query, null);
     return null;
   }
@@ -508,7 +503,6 @@ async function findUnsplash(query) {
 async function fallbackRandom(query) {
   console.log(`Trying fallback random image for: ${query}`);
 
-  // 더 구체적인 쿼리로 시도
   const cleanQuery =
     query.replace(/British Columbia/gi, "").trim() || "government";
   const src = `https://source.unsplash.com/1600x900/?${encodeURIComponent(
@@ -517,15 +511,13 @@ async function fallbackRandom(query) {
 
   try {
     const r = await axios.head(src, {
-      // HEAD 요청으로 변경
-      maxRedirects: 5, // 리다이렉트 허용
+      maxRedirects: 5,
       timeout: 15000,
       validateStatus: (status) => status >= 200 && status < 400,
     });
 
     console.log(`Fallback source response: ${r.status}`);
 
-    // 실제 이미지 URL 반환
     if (r.request?.res?.responseUrl) {
       const finalUrl = r.request.res.responseUrl;
       console.log(`Fallback final URL: ${finalUrl}`);
@@ -540,7 +532,6 @@ async function fallbackRandom(query) {
 }
 
 async function ensureHero(title, currentUrl) {
-  // 현재 URL이 유효한 이미지인지 확인
   if (
     currentUrl &&
     !/default-og-image/i.test(currentUrl) &&
@@ -554,14 +545,12 @@ async function ensureHero(title, currentUrl) {
   const q = buildQueryFromTitle(title || "British Columbia government");
   console.log(`Building query from title "${title}" -> "${q}"`);
 
-  // Unsplash API 시도
   const apiResult = await findUnsplash(q);
   if (apiResult) {
     console.log(`Using Unsplash API result: ${apiResult}`);
     return apiResult;
   }
 
-  // 폴백 이미지 시도
   const fallbackResult = await fallbackRandom(q);
   console.log(`Using fallback result: ${fallbackResult}`);
   return fallbackResult;
@@ -572,10 +561,16 @@ async function collectLinksByClick(browser) {
   await page.setUserAgent(UA);
 
   console.log("Starting to collect news links...");
+
+  await page.setViewport({ width: 1920, height: 1080 });
+
   await page.goto(START, { waitUntil: "domcontentloaded", timeout: 60000 });
+
+  await new Promise((resolve) => setTimeout(resolve, 3000));
 
   const seen = new Set();
   let clicks = 0;
+  let emptyRounds = 0;
 
   async function grab() {
     try {
@@ -615,6 +610,11 @@ async function collectLinksByClick(browser) {
 
   while (collected.length < COUNT && clicks < MAX_CLICKS) {
     try {
+      await page.evaluate(() => {
+        window.scrollTo(0, document.body.scrollHeight);
+      });
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
       const prev = await page.evaluate(() => {
         const links = document.querySelectorAll('a[href*="/releases/"]');
         return links.length;
@@ -622,80 +622,153 @@ async function collectLinksByClick(browser) {
 
       console.log(`Before click ${clicks + 1}: ${prev} total links found`);
 
-      const clicked = await page.evaluate(() => {
-        const isMatch = (e) => {
-          const tx = (e.textContent || "")
-            .replace(/\s+/g, " ")
-            .trim()
-            .toLowerCase();
-          const id = (e.id || "").toLowerCase();
-          const cls = (e.className || "").toLowerCase();
-
-          return (
-            tx.includes("load more") ||
-            tx.includes("show more") ||
-            tx.includes("more releases") ||
-            id.includes("load") ||
-            id.includes("more") ||
-            cls.includes("load") ||
-            cls.includes("more") ||
-            cls.includes("pagination")
-          );
-        };
-
-        const selectors = [
-          "button",
-          "a",
-          'div[role="button"]',
-          ".btn",
-          ".button",
+      const clicked = await page.evaluate(async () => {
+        const loadMoreSelectors = [
+          'button[class*="load"]',
+          'button[class*="more"]',
+          'a[class*="load"]',
+          'a[class*="more"]',
           ".load-more",
           ".show-more",
-          '[class*="load"]',
-          '[class*="more"]',
+          ".btn-load-more",
+          ".pagination-load-more",
+          'button:contains("Load More")',
+          'a:contains("Load More")',
+          'button:contains("Show More")',
+          'a:contains("Show More")',
+          'button:contains("More")',
+          '[data-action*="load"]',
+          '[data-action*="more"]',
         ];
 
-        const candidates = [];
-        for (const selector of selectors) {
-          const elements = document.querySelectorAll(selector);
-          for (let i = 0; i < elements.length; i++) {
-            candidates.push(elements[i]);
-          }
-        }
+        const bcSpecificSelectors = [
+          ".news-releases .load-more",
+          ".news-listing .load-more",
+          ".releases-container .load-more",
+          'button[data-drupal-selector*="load"]',
+          'button[data-drupal-selector*="more"]',
+          ".view-news-releases .more-link",
+          ".pager-load-more",
+        ];
 
-        console.log(`Found ${candidates.length} potential buttons`);
-
-        for (let i = 0; i < Math.min(candidates.length, 10); i++) {
-          const el = candidates[i];
-          console.log(
-            `Button ${i}: "${(el.textContent || "").trim()}" class="${
-              el.className
-            }" id="${el.id}"`
-          );
-        }
+        const allSelectors = [...loadMoreSelectors, ...bcSpecificSelectors];
 
         let foundButton = null;
-        for (const el of candidates) {
-          if (
-            isMatch(el) &&
-            el.offsetParent !== null &&
-            !el.disabled &&
-            !el.classList.contains("disabled")
-          ) {
-            foundButton = el;
-            break;
+
+        for (const selector of allSelectors) {
+          try {
+            const elements = document.querySelectorAll(selector);
+            for (const el of elements) {
+              if (
+                el.offsetParent !== null &&
+                !el.disabled &&
+                !el.classList.contains("disabled")
+              ) {
+                foundButton = el;
+                console.log(
+                  `Found button with selector: ${selector}, text: "${el.textContent?.trim()}"`
+                );
+                break;
+              }
+            }
+            if (foundButton) break;
+          } catch (e) {
+            continue;
           }
         }
 
         if (!foundButton) {
-          console.log("No matching load more button found");
+          const allClickables = document.querySelectorAll(
+            'button, a, [role="button"], input[type="button"], input[type="submit"]'
+          );
+
+          for (const el of allClickables) {
+            const text = (el.textContent || el.value || "")
+              .toLowerCase()
+              .trim();
+            const title = (el.title || "").toLowerCase();
+            const ariaLabel = (
+              el.getAttribute("aria-label") || ""
+            ).toLowerCase();
+
+            if (
+              text.includes("load more") ||
+              text.includes("show more") ||
+              text.includes("more releases") ||
+              text.includes("view more") ||
+              text.includes("load additional") ||
+              title.includes("load more") ||
+              title.includes("show more") ||
+              ariaLabel.includes("load more") ||
+              ariaLabel.includes("show more") ||
+              (text === "more" && el.tagName.toLowerCase() === "button")
+            ) {
+              if (
+                el.offsetParent !== null &&
+                !el.disabled &&
+                !el.classList.contains("disabled")
+              ) {
+                foundButton = el;
+                console.log(
+                  `Found button by text: "${text}", element: ${el.tagName}`
+                );
+                break;
+              }
+            }
+          }
+        }
+
+        if (!foundButton) {
+          const paginationLinks = document.querySelectorAll(
+            '.pager a, .pagination a, [class*="pag"] a'
+          );
+          for (const link of paginationLinks) {
+            const text = (link.textContent || "").trim().toLowerCase();
+            const rel = (link.getAttribute("rel") || "").toLowerCase();
+
+            if (
+              text === "next" ||
+              text === "다음" ||
+              rel === "next" ||
+              text.includes("next")
+            ) {
+              foundButton = link;
+              console.log(
+                `Found pagination next button: "${link.textContent?.trim()}"`
+              );
+              break;
+            }
+          }
+        }
+
+        if (!foundButton) {
+          const allButtons = document.querySelectorAll(
+            'button, a, [role="button"]'
+          );
+          console.log(`=== All ${allButtons.length} buttons/links on page ===`);
+          for (let i = 0; i < Math.min(allButtons.length, 20); i++) {
+            const el = allButtons[i];
+            console.log(
+              `${i}: "${(el.textContent || "")
+                .trim()
+                .substring(0, 50)}" | class="${el.className}" | id="${el.id}"`
+            );
+          }
+          console.log("No load more button found");
           return false;
         }
 
         console.log(
-          `Clicking button: "${(foundButton.textContent || "").trim()}"`
+          `Clicking element: "${(
+            foundButton.textContent ||
+            foundButton.value ||
+            ""
+          ).trim()}"`
         );
         foundButton.scrollIntoView({ block: "center", behavior: "smooth" });
+
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
         foundButton.click();
         return true;
       });
@@ -705,7 +778,7 @@ async function collectLinksByClick(browser) {
         break;
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await new Promise((resolve) => setTimeout(resolve, 4000));
 
       const newCount = await page.evaluate((prevCount) => {
         const currentCount = document.querySelectorAll(
@@ -724,8 +797,13 @@ async function collectLinksByClick(browser) {
       );
 
       if (newItems.length === 0) {
-        console.log("No new items found, stopping");
-        break;
+        console.log("No new items found this round");
+        if (++emptyRounds >= 3) {
+          console.log("3 consecutive rounds with no new items, stopping");
+          break;
+        }
+      } else {
+        emptyRounds = 0;
       }
     } catch (error) {
       console.warn(`Error during click ${clicks + 1}:`, error.message);
