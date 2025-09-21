@@ -104,6 +104,7 @@ export default function ArticlesSection({
           <ArticleCard key={a.id} a={a} commentCount={counts?.get(a.id) ?? 0} />
         ))}
       </ul>
+
       {loading && (
         <div className="pt-2">
           <div
@@ -127,12 +128,12 @@ export default function ArticlesSection({
           </p>
         </div>
       )}
+
       <div className="py-2">
         <button
           onClick={onLoadMore}
           disabled={!hasMore || loading}
-          className="mx-auto block rounded-xl border px-4 py-2 text-sm
-                     disabled:opacity-50 hover:opacity-90 transition"
+          className="mx-auto block rounded-xl border px-4 py-2 text-sm disabled:opacity-50 hover:opacity-90 transition"
           style={{ borderColor: "var(--line)" }}
           aria-disabled={!hasMore || loading}
         >
@@ -144,8 +145,7 @@ export default function ArticlesSection({
         <button
           onClick={scrollToTop}
           aria-label="Scroll to top"
-          className="fixed bottom-6 right-6 h-10 w-10 rounded-full shadow-lg bg-white/90 backdrop-blur
-                     border border-slate-200 hover:shadow-xl transition grid place-items-center"
+          className="fixed bottom-6 right-6 h-10 w-10 rounded-full shadow-lg bg-white/90 backdrop-blur border border-slate-200 hover:shadow-xl transition grid place-items-center"
           title={mode === "ko" ? "맨 위로" : "Back to top"}
         >
           ↑

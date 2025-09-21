@@ -81,13 +81,14 @@ export default function ArticleCard({
   const summary =
     mode === "ko" ? a.summary_ko ?? a.summary_en : a.summary_en ?? a.summary_ko;
 
-  const bodyHtml =
+  const htmlFromFields =
+    (a as any).content_html || (a as any).body_html || null;
+  const rawBody =
     (mode === "ko"
       ? (a as any).content_ko || (a as any).body_ko
-      : (a as any).content_en || (a as any).body_en) ||
-    (a as any).content_html ||
-    (a as any).body_html ||
-    null;
+      : (a as any).content_en || (a as any).body_en) || null;
+  const bodyHtml =
+    htmlFromFields ?? (rawBody ? rawBody.replace(/\n/g, "<br/>") : null);
 
   const share = useCallback(async () => {
     const url = typeof window !== "undefined" ? window.location.href : "";
@@ -105,36 +106,43 @@ export default function ArticleCard({
 
   if (variant === "detail") {
     return (
-      <article className="card overflow-hidden rounded-3xl">
-        {a.hero_img ? (
-          <img
-            src={a.hero_img}
-            alt=""
-            className="w-full aspect-[16/9] sm:aspect-[21/9] md:aspect-[2/1] object-cover"
-          />
-        ) : (
-          <div className="w-full aspect-[16/9] bg-slate-100 grid place-items-center text-slate-400 text-xs">
-            GOVNEWS
+      <article className="overflow-hidden rounded-3xl shadow-sm">
+        <div className="relative">
+          {a.hero_img ? (
+            <img
+              src={a.hero_img}
+              alt=""
+              className="w-full aspect-[16/9] sm:aspect-[21/9] md:aspect-[2/1] object-cover"
+            />
+          ) : (
+            <div className="w-full aspect-[16/9] bg-slate-100 grid place-items-center text-slate-400 text-xs">
+              GOVNEWS
+            </div>
+          )}
+          <div className="absolute right-3 top-3 z-10">
+            <ScrapButton articleId={a.id} size="sm" />
           </div>
-        )}
-        <div className="p-4 sm:p-5 md:p-6 space-y-4">
-          <h1 className="text-[18px] sm:text-[22px] md:text-[28px] font-extrabold leading-snug tracking-[-0.2px]">
+        </div>
+
+        <div className="p-4 sm:p-6 md:p-8 space-y-6">
+          <h1 className="text-[20px] sm:text-[24px] md:text-[30px] font-extrabold leading-snug tracking-[-0.2px]">
             {title}
           </h1>
 
           {summary ? (
-            <p className="text-[14px] sm:text-[15px] text-slate-700 leading-7">
+            <div
+              className="rounded-2xl border bg-white/70 backdrop-blur px-4 py-3 sm:px-5 sm:py-4 text-[14px] sm:text-[15px] text-slate-700 leading-7"
+              style={{ borderColor: "var(--line)" }}
+            >
               {summary}
-            </p>
+            </div>
           ) : null}
-
           {bodyHtml ? (
             <div
-              className="prose prose-slate max-w-none text-[14px] sm:text-[15px]"
+              className="prose prose-slate max-w-none text-[15px] sm:text-[16px] leading-6 prose-headings:tracking-tight prose-headings:font-semibold prose-img:rounded-xl prose-a:no-underline hover:prose-a:underline prose-p:my-2 prose-li:my-1"
               dangerouslySetInnerHTML={{ __html: bodyHtml }}
             />
           ) : null}
-
           <div className="pt-1 flex items-center gap-2">
             <button
               onClick={share}
@@ -149,7 +157,6 @@ export default function ArticleCard({
             ) : (
               <CountPill count={count} />
             )}
-            <ScrapButton articleId={a.id} size="sm" />
           </div>
         </div>
       </article>
@@ -157,39 +164,40 @@ export default function ArticleCard({
   }
 
   return (
-    <li className="relative card p-3 md:p-4 hover:shadow-md transition rounded-2xl">
+    <li className="relative p-0 overflow-hidden rounded-2xl hover:shadow-md transition">
       <div className="absolute right-3 top-3 z-10">
         <ScrapButton articleId={a.id} size="sm" />
       </div>
-      <Link
-        href={`/articles/${encodeURIComponent(a.id)}`}
-        className="flex gap-3 md:gap-4"
-      >
-        {a.hero_img ? (
-          <img
-            src={a.hero_img}
-            alt=""
-            className="h-20 w-28 md:w-32 object-cover rounded-xl shrink-0"
-          />
-        ) : (
-          <div className="h-20 w-28 md:w-32 rounded-xl bg-slate-100 grid place-items-center text-slate-400 text-xs">
-            GOVNEWS
+      <Link href={`/articles/${encodeURIComponent(a.id)}`} className="block">
+        <div className="flex gap-3 md:gap-4 p-3 md:p-4">
+          <div className="h-20 w-28 md:w-32 shrink-0">
+            {a.hero_img ? (
+              <img
+                src={a.hero_img}
+                alt=""
+                className="h-20 w-28 md:w-32 object-cover rounded-xl"
+              />
+            ) : (
+              <div className="h-20 w-28 md:w-32 rounded-xl bg-slate-100 grid place-items-center text-slate-400 text-xs">
+                GOVNEWS
+              </div>
+            )}
           </div>
-        )}
-        <div className="min-w-0 flex-1 pr-16 md:pr-20">
-          <h3 className="text-[14px] sm:text-[15px] md:text-[16px] font-semibold leading-snug break-words">
-            {title}
-          </h3>
-          {summary && (
-            <p className="mt-1 hidden md:block text-[12px] text-slate-600 leading-5">
-              {summary}
-            </p>
-          )}
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-            <span className="px-2 py-0.5 rounded-full bg-slate-100">
-              Canada BC
-            </span>
-            {a.published_at && <span>{fmt(a.published_at)}</span>}
+          <div className="min-w-0 flex-1 pr-16 md:pr-20">
+            <h3 className="text-[14px] sm:text-[15px] md:text-[16px] font-semibold leading-snug break-words">
+              {title}
+            </h3>
+            {summary && (
+              <p className="mt-1 hidden md:block text-[12px] text-slate-600 leading-5">
+                {summary}
+              </p>
+            )}
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+              <span className="px-2 py-0.5 rounded-full bg-slate-100">
+                Canada BC
+              </span>
+              {a.published_at && <span>{fmt(a.published_at)}</span>}
+            </div>
           </div>
         </div>
       </Link>
