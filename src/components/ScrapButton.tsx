@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useScrap } from "@/contexts/ScrapContext";
+import { supabase } from "@/lib/supabaseClient";
+import { openAuthDialog } from "@/components/AuthModal";
 import { Bookmark, BookmarkCheck } from "lucide-react";
 
 export default function ScrapButton({
@@ -24,12 +26,22 @@ export default function ScrapButton({
     return { btn: "h-9 w-9", icon: "w-5 h-5" };
   }, [size]);
 
+  const ensureLogin = async () => {
+    const { data } = await supabase.auth.getUser();
+    if (!data.user) {
+      openAuthDialog("login");
+      return false;
+    }
+    return true;
+  };
+
   return (
     <button
       type="button"
       onClick={async (e) => {
         e.preventDefault();
         e.stopPropagation();
+        if (!(await ensureLogin())) return;
         await toggle(articleId);
       }}
       className={`rounded-full border ${

@@ -63,13 +63,16 @@ export function ScrapProvider({ children }: { children: React.ReactNode }) {
   }, [loadFromDb]);
 
   useEffect(() => {
-    const sub = supabase.auth.onAuthStateChange(async () => {
-      await fetchUser();
-      await loadFromDb();
+    const sub = supabase.auth.onAuthStateChange(async (event) => {
+      if (event === "SIGNED_OUT") {
+        setIds(new Set());
+        setReady(true);
+      } else {
+        await fetchUser();
+        await loadFromDb();
+      }
     });
-    return () => {
-      sub.data.subscription.unsubscribe();
-    };
+    return () => sub.data.subscription.unsubscribe();
   }, [loadFromDb]);
 
   const isScrapped = useCallback((id: string) => ids.has(id), [ids]);

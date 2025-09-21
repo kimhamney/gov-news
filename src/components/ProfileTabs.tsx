@@ -6,12 +6,14 @@ import { Article } from "@/types/article";
 import Link from "next/link";
 import { useT } from "@/lib/i18n";
 import { useRouter } from "next/navigation";
+import { useScrap } from "@/contexts/ScrapContext";
 
 type ScrapRow = { article_id: string; created_at: string };
 
 export default function ProfileTabs() {
   const t = useT();
   const router = useRouter();
+  const { resetFromDb } = useScrap();
 
   const seedUid =
     typeof document !== "undefined"
@@ -51,9 +53,7 @@ export default function ProfileTabs() {
         return;
       }
       const { data: s } = await supabase.auth.getSession();
-      if (!canceled && s?.session?.user?.id) {
-        setUserId(s.session.user.id);
-      }
+      if (!canceled && s?.session?.user?.id) setUserId(s.session.user.id);
       if (!canceled) setAuthReady(true);
     };
 
@@ -189,6 +189,7 @@ export default function ProfileTabs() {
   const signOut = async () => {
     setUserId(null);
     await supabase.auth.signOut();
+    await resetFromDb();
     router.refresh();
   };
 
@@ -205,56 +206,48 @@ export default function ProfileTabs() {
     return (
       <div className="rounded-2xl bg-white border border-slate-100 shadow-card p-6">
         <div className="text-sm text-slate-600">{t("ui.needSignin")}</div>
-        <button
-          onClick={async () => {
-            const { data } = await supabase.auth.getUser();
-            setUserId(data?.user?.id ?? null);
-            setAuthReady(true);
-          }}
-          className="mt-3 px-3 py-1.5 rounded-lg border text-sm"
-        >
-          {t("ui.retry")}
-        </button>
       </div>
     );
 
   return (
-    <div className="rounded-2xl bg-white border border-slate-100 shadow-card">
-      <div className="flex border-b border-slate-100">
-        <button
-          onClick={() => setTab("profile")}
-          className={`px-4 py-3 text-sm ${
-            tab === "profile"
-              ? "text-slate-900 border-b-2 border-slate-900"
-              : "text-slate-500"
-          }`}
-        >
-          Profile
-        </button>
-        <button
-          onClick={() => setTab("scraps")}
-          className={`px-4 py-3 text-sm ${
-            tab === "scraps"
-              ? "text-slate-900 border-b-2 border-slate-900"
-              : "text-slate-500"
-          }`}
-        >
-          Scraps
-        </button>
-        <button
-          onClick={() => setTab("replies")}
-          className={`px-4 py-3 text-sm ${
-            tab === "replies"
-              ? "text-slate-900 border-b-2 border-slate-900"
-              : "text-slate-500"
-          }`}
-        >
-          My replies
-        </button>
+    <div className="rounded-3xl bg-white border border-slate-100 shadow-card overflow-hidden">
+      <div className="px-4 pt-3 border-b border-slate-100">
+        <nav className="flex gap-6">
+          <button
+            onClick={() => setTab("profile")}
+            className={`px-1 py-3 text-sm font-medium ${
+              tab === "profile"
+                ? "text-slate-900 border-b-2 border-slate-900"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            Profile
+          </button>
+          <button
+            onClick={() => setTab("scraps")}
+            className={`px-1 py-3 text-sm font-medium ${
+              tab === "scraps"
+                ? "text-slate-900 border-b-2 border-slate-900"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            Scraps
+          </button>
+          <button
+            onClick={() => setTab("replies")}
+            className={`px-1 py-3 text-sm font-medium ${
+              tab === "replies"
+                ? "text-slate-900 border-b-2 border-slate-900"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            My replies
+          </button>
+        </nav>
       </div>
 
       {tab === "profile" && (
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <label className="block">
               <span className="block text-xs text-slate-600 mb-1">
@@ -282,13 +275,13 @@ export default function ProfileTabs() {
             <button
               onClick={save}
               disabled={disabled}
-              className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm hover:opacity-90 disabled:opacity-60"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--brand)] text-white text-sm hover:opacity-90 disabled:opacity-60"
             >
               {saving ? t("ui.saving") : t("ui.save")}
             </button>
             <button
               onClick={signOut}
-              className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 text-sm hover:opacity-90"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-slate-700 text-sm hover:bg-slate-50"
             >
               Logout
             </button>
@@ -353,7 +346,7 @@ export default function ProfileTabs() {
             <div className="text-sm text-slate-600">{t("ui.noComments")}</div>
           )}
           {!loadingReplies &&
-            replies.map((r) => <ReplyItem key={r.id} r={r} self={userId} />)}
+            replies.map((r) => <ReplyItem key={r.id} r={r} />)}
         </div>
       )}
     </div>
@@ -362,103 +355,22 @@ export default function ProfileTabs() {
 
 function ReplyItem({
   r,
-  self,
 }: {
-  r: {
-    id: string;
-    article_id: string;
-    user_id?: string;
-    body: string;
-    created_at: string;
-  };
-  self: string | null;
+  r: { id: string; article_id: string; body: string; created_at: string };
 }) {
   const t = useT();
-  const [editing, setEditing] = useState(false);
-  const [text, setText] = useState(r.body);
-  const [busy, setBusy] = useState(false);
-
-  const save = async () => {
-    if (!self) return;
-    setBusy(true);
-    await supabase
-      .from("replies")
-      .update({ body: text.trim() })
-      .eq("id", r.id)
-      .eq("user_id", self);
-    setBusy(false);
-    setEditing(false);
-  };
-
-  const del = async () => {
-    if (!self) return;
-    if (!window.confirm(t("ui.confirmDelete"))) return;
-    await supabase.from("replies").delete().eq("id", r.id).eq("user_id", self);
-    window.dispatchEvent(new Event("replies:changed"));
-  };
-
   return (
     <div className="rounded-xl border border-slate-200 p-4 space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <Link
-          href={`/articles/${encodeURIComponent(r.article_id)}`}
-          className="text-xs text-slate-500 hover:underline"
-        >
-          {t("ui.goToArticle")}
-        </Link>
-        {self && !editing && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setEditing(true)}
-              className="text-xs text-slate-500 hover:text-slate-700"
-            >
-              {t("ui.edit")}
-            </button>
-            <button
-              onClick={del}
-              className="text-xs text-red-500 hover:text-red-600"
-            >
-              {t("ui.delete")}
-            </button>
-          </div>
-        )}
+      <Link
+        href={`/articles/${encodeURIComponent(r.article_id)}`}
+        className="text-xs text-slate-500 hover:underline"
+      >
+        {t("ui.goToArticle")}
+      </Link>
+      <div className="text-sm text-slate-800 whitespace-pre-line">{r.body}</div>
+      <div className="text-xs text-slate-400">
+        {new Date(r.created_at).toLocaleString()}
       </div>
-      {editing ? (
-        <>
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-slate-200 min-h-[80px]"
-          />
-          <div className="flex justify-end gap-2">
-            <button
-              onClick={() => {
-                setEditing(false);
-                setText(r.body);
-              }}
-              className="btn btn-ghost"
-            >
-              {t("ui.cancel")}
-            </button>
-            <button
-              onClick={save}
-              disabled={busy}
-              className="btn btn-brand disabled:opacity-60"
-            >
-              {busy ? t("ui.updating") : t("ui.update")}
-            </button>
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="text-sm text-slate-800 whitespace-pre-line">
-            {r.body}
-          </div>
-          <div className="text-xs text-slate-400">
-            {new Date(r.created_at).toLocaleString()}
-          </div>
-        </>
-      )}
     </div>
   );
 }

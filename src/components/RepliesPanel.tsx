@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useT } from "@/lib/i18n";
+import { openAuthDialog } from "@/components/AuthModal";
 
 type Reply = {
   id: string;
@@ -21,11 +22,14 @@ export default function RepliesPanel({
   onCountChange?: (n: number) => void;
 }) {
   const t = useT();
+
   const [userId, setUserId] = useState<string | null>(null);
   const [body, setBody] = useState("");
   const [saving, setSaving] = useState(false);
+
   const [list, setList] = useState<Reply[]>(initialList);
   const [loading, setLoading] = useState(initialList.length === 0);
+
   const [editId, setEditId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [updating, setUpdating] = useState(false);
@@ -34,6 +38,7 @@ export default function RepliesPanel({
     supabase.auth
       .getUser()
       .then(({ data }) => setUserId(data.user?.id ?? null));
+
     const load = async () => {
       if (initialList.length > 0) {
         setList(initialList);
@@ -50,9 +55,16 @@ export default function RepliesPanel({
       setLoading(false);
     };
     load();
+
+    const sub = supabase.auth.onAuthStateChange((_e, s) =>
+      setUserId(s?.user?.id ?? null)
+    );
     const onChanged = () => load();
     window.addEventListener("replies:changed", onChanged);
-    return () => window.removeEventListener("replies:changed", onChanged);
+    return () => {
+      sub.data.subscription.unsubscribe();
+      window.removeEventListener("replies:changed", onChanged);
+    };
   }, [articleId, initialList]);
 
   useEffect(() => {
@@ -64,17 +76,21 @@ export default function RepliesPanel({
     );
   }, [list.length, articleId, onCountChange]);
 
-  const submit = async () => {
-    if (!userId) {
-      const origin = window.location.origin;
-      await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: { redirectTo: `${origin}/auth/callback` },
-      });
-      return;
+  const requireLogin = async () => {
+    const { data } = await supabase.auth.getUser();
+    if (!data.user) {
+      openAuthDialog("login");
+      return false;
     }
+    return true;
+  };
+
+  const submit = async () => {
+    if (!(await requireLogin())) return;
+    if (!userId) return;
     const text = body.trim();
     if (!text) return;
+
     setSaving(true);
     const temp: Reply = {
       id: `temp-${crypto.randomUUID()}`,
@@ -110,10 +126,13 @@ export default function RepliesPanel({
     setEditId(null);
     setEditText("");
   };
+
   const applyEdit = async () => {
+    if (!(await requireLogin())) return;
     if (!editId || !userId) return;
     const text = editText.trim();
     if (!text) return;
+
     setUpdating(true);
     const prev = list;
     setList((cur) =>
@@ -131,6 +150,7 @@ export default function RepliesPanel({
   };
 
   const removeReply = async (id: string) => {
+    if (!(await requireLogin())) return;
     if (!userId) return;
     if (!window.confirm(t("ui.confirmDelete"))) return;
     const prev = list;
@@ -152,26 +172,32 @@ export default function RepliesPanel({
           placeholder={t("ui.writeComment")}
           className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-slate-200 min-h-[80px]"
         />
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          {!userId && (
+            <button
+              onClick={() => openAuthDialog("login")}
+              className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 text-sm hover:bg-slate-50"
+            >
+              {t("ui.login")}
+            </button>
+          )}
           <button
             onClick={submit}
             disabled={saving}
-            className="btn btn-brand disabled:opacity-60"
+            className="px-3 py-1.5 rounded-xl bg-[var(--brand)] text-white text-sm hover:opacity-90 disabled:opacity-60"
           >
             {saving ? t("ui.posting") : t("ui.post")}
           </button>
         </div>
       </div>
 
-      <div className="space-y-3">
-        {loading && (
-          <div className="text-sm text-slate-600">{t("ui.loading")}</div>
-        )}
-        {!loading && list.length === 0 && (
-          <div className="text-sm text-slate-600">{t("ui.noComments")}</div>
-        )}
-        {!loading &&
-          list.map((r) => (
+      {loading ? (
+        <div className="text-sm text-slate-600">{t("ui.loading")}</div>
+      ) : list.length === 0 ? (
+        <div className="text-sm text-slate-600">{t("ui.noComments")}</div>
+      ) : (
+        <div className="space-y-3">
+          {list.map((r) => (
             <div key={r.id} className="rounded-xl border border-slate-200 p-4">
               {editId === r.id ? (
                 <div className="space-y-2">
@@ -181,13 +207,16 @@ export default function RepliesPanel({
                     className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-slate-200 min-h-[80px]"
                   />
                   <div className="flex items-center gap-2 justify-end">
-                    <button onClick={cancelEdit} className="btn btn-ghost">
+                    <button
+                      onClick={cancelEdit}
+                      className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 text-sm hover:bg-slate-50"
+                    >
                       {t("ui.cancel")}
                     </button>
                     <button
                       onClick={applyEdit}
                       disabled={updating}
-                      className="btn btn-brand disabled:opacity-60"
+                      className="px-3 py-1.5 rounded-xl bg-[var(--brand)] text-white text-sm hover:opacity-90 disabled:opacity-60"
                     >
                       {updating ? t("ui.updating") : t("ui.update")}
                     </button>
@@ -216,14 +245,15 @@ export default function RepliesPanel({
                       </div>
                     )}
                   </div>
-                  <div className="text-xs text-slate-400 mt-2">
+                  <div className="text-xs text-slate-400 mt-1">
                     {new Date(r.created_at).toLocaleString()}
                   </div>
                 </>
               )}
             </div>
           ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

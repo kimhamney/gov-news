@@ -34,7 +34,19 @@ type Dict = Record<
   | "ui.updating"
   | "ui.confirmDelete"
   | "ui.edited"
-  | "ui.retry",
+  | "ui.retry"
+  | "ui.checkYourEmail"
+  | "ui.signInEmail"
+  | "ui.sending"
+  | "ui.sent"
+  | "ui.sendLink"
+  | "ui.emailLogin"
+  | "ui.signUp"
+  | "ui.signingIn"
+  | "ui.signin"
+  | "ui.continueWithGoogle"
+  | "ui.newPassword"
+  | "ui.confirmPassword",
   Entry
 >;
 
@@ -80,6 +92,24 @@ const dict: Dict = {
   },
   "ui.edited": { en: "(edited)", ko: "(수정됨)" },
   "ui.retry": { en: "retry", ko: "재시도" },
+  "ui.checkYourEmail": {
+    en: "Check your email for the login link.",
+    ko: "이메일을 체크해 주세요",
+  },
+  "ui.signInEmail": { en: "Sign in with email", ko: "이메일 로그인" },
+  "ui.sending": { en: "Sending...", ko: "보내는 중" },
+  "ui.sent": { en: "Sent", ko: "보냄" },
+  "ui.sendLink": { en: "Send link", ko: "링크 보내기" },
+  "ui.emailLogin": { en: "Email login", ko: "이메일 로그인" },
+  "ui.signUp": { en: "Sign up", ko: "회원가입" },
+  "ui.signingIn": { en: "Signing in...", ko: "로그인 중..." },
+  "ui.signin": { en: "Sign in", ko: "로그인" },
+  "ui.continueWithGoogle": {
+    en: "Continue with Google",
+    ko: "구글로 계속하기",
+  },
+  "ui.newPassword": { en: "New password", ko: "비밀번호 입력" },
+  "ui.confirmPassword": { en: "Confirm password", ko: "비밀번호 확인" },
 };
 
 function pick(mode: "en" | "ko" | "mix", en: string, ko?: string) {

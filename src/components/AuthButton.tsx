@@ -1,63 +1,46 @@
 "use client";
-import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { useT } from "@/lib/i18n";
-import { User as UserIcon } from "lucide-react";
+import { User } from "lucide-react";
+import { openAuthDialog } from "@/components/AuthModal";
 
 export default function AuthButton() {
-  const t = useT();
   const seedUid =
     typeof document !== "undefined" ? document.body.dataset.uid || null : null;
-
   const [ready, setReady] = useState<boolean>(!!seedUid);
   const [userId, setUserId] = useState<string | null>(seedUid);
 
   useEffect(() => {
-    let didInit = false;
-    const sub = supabase.auth.onAuthStateChange(async (_event, session) => {
-      didInit = true;
-      const sid = session?.user?.id ?? null;
-      setUserId(sid);
+    let mounted = true;
+    (async () => {
+      if (!seedUid) {
+        const { data } = await supabase.auth.getSession();
+        if (!mounted) return;
+        setUserId(data?.session?.user?.id ?? null);
+      }
+      setReady(true);
+    })();
+    const sub = supabase.auth.onAuthStateChange((_e, s) => {
+      if (!mounted) return;
+      setUserId(s?.user?.id ?? null);
       setReady(true);
     });
-
-    (async () => {
-      if (seedUid) return;
-      const { data } = await supabase.auth.getSession();
-      if (data?.session) {
-        setUserId(data.session.user.id);
-        setReady(true);
-      } else {
-        setReady(true);
-      }
-      if (!didInit) {
-        setTimeout(async () => {
-          const { data: u } = await supabase.auth.getUser();
-          if (u?.user?.id && !userId) setUserId(u.user.id);
-        }, 0);
-      }
-    })();
-
     return () => {
+      mounted = false;
       sub.data.subscription.unsubscribe();
     };
-  }, [seedUid, userId]);
-
-  const signIn = async () => {
-    const origin = window.location.origin;
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${origin}/auth/callback` },
-    });
-  };
+  }, [seedUid]);
 
   if (!ready) return null;
 
   if (!userId) {
     return (
-      <button onClick={signIn} className="btn btn-ghost animate-fadeIn">
-        {t("ui.login")}
+      <button
+        onClick={() => openAuthDialog("login")}
+        className="px-3 h-9 rounded-xl bg-[var(--brand)] text-white text-xs font-medium hover:opacity-90 transition"
+      >
+        로그인
       </button>
     );
   }
@@ -65,11 +48,11 @@ export default function AuthButton() {
   return (
     <Link
       href="/me"
-      className="w-8 h-8 rounded-full bg-[var(--brand)] flex items-center justify-center hover:opacity-80 transition-opacity animate-fadeIn"
-      aria-label="Go to profile"
-      title="Go to profile"
+      className="h-9 w-9 rounded-full bg-[var(--brand)] text-white grid place-items-center hover:opacity-90 transition"
+      title="My profile"
+      aria-label="My profile"
     >
-      <UserIcon className="w-5 h-5 text-white" />
+      <User className="w-5 h-5" />
     </Link>
   );
 }
