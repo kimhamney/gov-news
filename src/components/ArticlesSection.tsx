@@ -86,6 +86,17 @@ export default function ArticlesSection({
     loadingImages: mode === "ko" ? "이미지 로딩 중…" : "Loading images…",
   };
 
+  const [showTop, setShowTop] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setShowTop(window.scrollY > 240);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  const scrollToTop = useCallback(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
   return (
     <section className="space-y-3">
       <ul className="flex flex-col gap-3">
@@ -124,11 +135,22 @@ export default function ArticlesSection({
                      disabled:opacity-50 hover:opacity-90 transition"
           style={{ borderColor: "var(--line)" }}
           aria-disabled={!hasMore || loading}
-          x
         >
           {loading ? texts.loading : hasMore ? texts.loadMore : texts.end}
         </button>
       </div>
+
+      {showTop && (
+        <button
+          onClick={scrollToTop}
+          aria-label="Scroll to top"
+          className="fixed bottom-6 right-6 h-10 w-10 rounded-full shadow-lg bg-white/90 backdrop-blur
+                     border border-slate-200 hover:shadow-xl transition grid place-items-center"
+          title={mode === "ko" ? "맨 위로" : "Back to top"}
+        >
+          ↑
+        </button>
+      )}
     </section>
   );
 }

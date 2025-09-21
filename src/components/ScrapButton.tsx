@@ -1,9 +1,21 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
-import { useScrap } from "@/contexts/ScrapContext";
+import { useMemo } from "react";
+import { Bookmark, BookmarkCheck } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { openAuthDialog } from "@/components/AuthModal";
-import { Bookmark, BookmarkCheck } from "lucide-react";
+import { useScrap } from "@/contexts/ScrapContext";
+
+function useScrapSafe() {
+  try {
+    return useScrap();
+  } catch (e) {
+    console.warn(
+      "[ScrapButton] ScrapProvider not found — rendering in read-only mode.",
+      e
+    );
+    return null;
+  }
+}
 
 export default function ScrapButton({
   articleId,
@@ -14,11 +26,9 @@ export default function ScrapButton({
   size?: "sm" | "md" | "lg";
   className?: string;
 }) {
-  const { isScrapped, toggle, ready } = useScrap();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
-  const active = mounted && ready ? isScrapped(articleId) : false;
+  const scrap = useScrapSafe();
+  const ready = !!scrap?.ready;
+  const active = ready && scrap!.isScrapped(articleId);
 
   const dims = useMemo(() => {
     if (size === "sm") return { btn: "h-8 w-8", icon: "w-4 h-4" };
@@ -26,24 +36,31 @@ export default function ScrapButton({
     return { btn: "h-9 w-9", icon: "w-5 h-5" };
   }, [size]);
 
-  const ensureLogin = async () => {
+  const onClick = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
     const { data } = await supabase.auth.getUser();
     if (!data.user) {
+      console.debug("[ScrapButton] openAuthDialog(login) — not signed in");
       openAuthDialog("login");
-      return false;
+      return;
     }
-    return true;
+
+    if (!scrap) {
+      console.warn(
+        "[ScrapButton] Click ignored — ScrapProvider is missing (signed-in)."
+      );
+      return;
+    }
+
+    await scrap.toggle(articleId);
   };
 
   return (
     <button
       type="button"
-      onClick={async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!(await ensureLogin())) return;
-        await toggle(articleId);
-      }}
+      onClick={onClick}
       className={`rounded-full border ${
         dims.btn
       } grid place-items-center hover:opacity-80 transition-opacity ${
@@ -51,10 +68,10 @@ export default function ScrapButton({
           ? "bg-emerald-50 border-emerald-200"
           : "bg-white border-[var(--line)]"
       } ${className}`}
-      aria-pressed={active}
+      aria-pressed={!!active}
       aria-label={active ? "Unscrap" : "Scrap"}
       title={active ? "Remove from Scrap" : "Add to Scrap"}
-      disabled={!ready}
+      disabled={scrap ? !ready : false}
     >
       {active ? (
         <BookmarkCheck className={`${dims.icon} text-emerald-600`} />

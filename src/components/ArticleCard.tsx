@@ -81,6 +81,14 @@ export default function ArticleCard({
   const summary =
     mode === "ko" ? a.summary_ko ?? a.summary_en : a.summary_en ?? a.summary_ko;
 
+  const bodyHtml =
+    (mode === "ko"
+      ? (a as any).content_ko || (a as any).body_ko
+      : (a as any).content_en || (a as any).body_en) ||
+    (a as any).content_html ||
+    (a as any).body_html ||
+    null;
+
   const share = useCallback(async () => {
     const url = typeof window !== "undefined" ? window.location.href : "";
     const text = title || "GOVNEWS";
@@ -113,11 +121,20 @@ export default function ArticleCard({
           <h1 className="text-[18px] sm:text-[22px] md:text-[28px] font-extrabold leading-snug tracking-[-0.2px]">
             {title}
           </h1>
-          {summary && (
+
+          {summary ? (
             <p className="text-[14px] sm:text-[15px] text-slate-700 leading-7">
               {summary}
             </p>
-          )}
+          ) : null}
+
+          {bodyHtml ? (
+            <div
+              className="prose prose-slate max-w-none text-[14px] sm:text-[15px]"
+              dangerouslySetInnerHTML={{ __html: bodyHtml }}
+            />
+          ) : null}
+
           <div className="pt-1 flex items-center gap-2">
             <button
               onClick={share}

@@ -38,10 +38,17 @@ export default function RepliesPanel({
     supabase.auth
       .getUser()
       .then(({ data }) => setUserId(data.user?.id ?? null));
+    const sub = supabase.auth.onAuthStateChange((_e, s) =>
+      setUserId(s?.user?.id ?? null)
+    );
+    return () => sub.data.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
 
     const load = async () => {
       if (initialList.length > 0) {
-        setList(initialList);
         setLoading(false);
         return;
       }
@@ -51,29 +58,26 @@ export default function RepliesPanel({
         .select("id,user_id,article_id,body,created_at")
         .eq("article_id", articleId)
         .order("created_at", { ascending: false });
+      if (!mounted) return;
       setList(((data as Reply[]) ?? []) as Reply[]);
       setLoading(false);
     };
-    load();
 
-    const sub = supabase.auth.onAuthStateChange((_e, s) =>
-      setUserId(s?.user?.id ?? null)
-    );
-    const onChanged = () => load();
-    window.addEventListener("replies:changed", onChanged);
+    load();
     return () => {
-      sub.data.subscription.unsubscribe();
-      window.removeEventListener("replies:changed", onChanged);
+      mounted = false;
     };
   }, [articleId, initialList]);
 
   useEffect(() => {
     onCountChange?.(list.length);
-    window.dispatchEvent(
-      new CustomEvent("replies:count", {
-        detail: { articleId, count: list.length },
-      })
-    );
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("replies:count", {
+          detail: { articleId, count: list.length },
+        })
+      );
+    }
   }, [list.length, articleId, onCountChange]);
 
   const requireLogin = async () => {
@@ -153,6 +157,7 @@ export default function RepliesPanel({
     if (!(await requireLogin())) return;
     if (!userId) return;
     if (!window.confirm(t("ui.confirmDelete"))) return;
+
     const prev = list;
     setList((cur) => cur.filter((r) => r.id !== id));
     const { error } = await supabase
@@ -169,18 +174,14 @@ export default function RepliesPanel({
         <textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
+          onFocus={async (e) => {
+            const ok = await requireLogin();
+            if (!ok) e.currentTarget.blur();
+          }}
           placeholder={t("ui.writeComment")}
           className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-slate-200 min-h-[80px]"
         />
         <div className="flex justify-end gap-2">
-          {!userId && (
-            <button
-              onClick={() => openAuthDialog("login")}
-              className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 text-sm hover:bg-slate-50"
-            >
-              {t("ui.login")}
-            </button>
-          )}
           <button
             onClick={submit}
             disabled={saving}
