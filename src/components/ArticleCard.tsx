@@ -110,7 +110,7 @@ export default function ArticleCard({
           </div>
         )}
         <div className="p-4 sm:p-5 md:p-6 space-y-4">
-          <h1 className="text-[22px] sm:text-[24px] md:text-[28px] font-extrabold leading-snug tracking-[-0.2px]">
+          <h1 className="text-[18px] sm:text-[22px] md:text-[28px] font-extrabold leading-snug tracking-[-0.2px]">
             {title}
           </h1>
           {summary && (
@@ -160,7 +160,7 @@ export default function ArticleCard({
           </div>
         )}
         <div className="min-w-0 flex-1 pr-16 md:pr-20">
-          <h3 className="text-[15px] md:text-[16px] font-semibold leading-snug break-words">
+          <h3 className="text-[14px] sm:text-[15px] md:text-[16px] font-semibold leading-snug break-words">
             {title}
           </h3>
           {summary && (
