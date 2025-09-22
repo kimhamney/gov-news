@@ -19,7 +19,7 @@ type ScrapContextValue = {
   resetFromDb: () => Promise<void>;
 };
 
-const ScrapContext = createContext<ScrapContextValue | null>(null);
+export const ScrapContext = createContext<ScrapContextValue | null>(null);
 
 export function ScrapProvider({ children }: { children: React.ReactNode }) {
   const [ids, setIds] = useState<Set<string>>(new Set());
@@ -50,9 +50,7 @@ export function ScrapProvider({ children }: { children: React.ReactNode }) {
       .select("article_id")
       .eq("user_id", uid);
 
-    if (!error) {
-      setIds(new Set((data ?? []).map((r: any) => r.article_id)));
-    }
+    if (!error) setIds(new Set((data ?? []).map((r: any) => r.article_id)));
     setReady(true);
     loadingRef.current = false;
   }, [fetchUserId]);
@@ -81,20 +79,16 @@ export function ScrapProvider({ children }: { children: React.ReactNode }) {
     async (id: string) => {
       const uid = userIdRef.current ?? (await fetchUserId());
       if (!uid) return;
-
       setIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
-
       const { error } = await supabase
         .from("scraps")
         .insert({ user_id: uid, article_id: id });
-
-      if (error) {
+      if (error)
         setIds((prev) => {
           const next = new Set(prev);
           next.delete(id);
           return next;
         });
-      }
     },
     [fetchUserId]
   );
@@ -103,23 +97,18 @@ export function ScrapProvider({ children }: { children: React.ReactNode }) {
     async (id: string) => {
       const uid = userIdRef.current ?? (await fetchUserId());
       if (!uid) return;
-
       setIds((prev) => {
         if (!prev.has(id)) return prev;
         const next = new Set(prev);
         next.delete(id);
         return next;
       });
-
       const { error } = await supabase
         .from("scraps")
         .delete()
         .eq("user_id", uid)
         .eq("article_id", id);
-
-      if (error) {
-        setIds((prev) => new Set(prev).add(id));
-      }
+      if (error) setIds((prev) => new Set(prev).add(id));
     },
     [fetchUserId]
   );
@@ -150,4 +139,8 @@ export function useScrap() {
   const v = useContext(ScrapContext);
   if (!v) throw new Error("useScrap must be used within ScrapProvider");
   return v;
+}
+
+export function useScrapSafe() {
+  return useContext(ScrapContext);
 }

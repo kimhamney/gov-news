@@ -3,19 +3,7 @@ import { useMemo } from "react";
 import { Bookmark, BookmarkCheck } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { openAuthDialog } from "@/components/AuthModal";
-import { useScrap } from "@/contexts/ScrapContext";
-
-function useScrapSafe() {
-  try {
-    return useScrap();
-  } catch (e) {
-    console.warn(
-      "[ScrapButton] ScrapProvider not found — rendering in read-only mode.",
-      e
-    );
-    return null;
-  }
-}
+import { useScrapSafe } from "@/contexts/ScrapContext";
 
 export default function ScrapButton({
   articleId,
@@ -39,21 +27,12 @@ export default function ScrapButton({
   const onClick = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-
     const { data } = await supabase.auth.getUser();
     if (!data.user) {
-      console.debug("[ScrapButton] openAuthDialog(login) — not signed in");
       openAuthDialog("login");
       return;
     }
-
-    if (!scrap) {
-      console.warn(
-        "[ScrapButton] Click ignored — ScrapProvider is missing (signed-in)."
-      );
-      return;
-    }
-
+    if (!scrap) return;
     await scrap.toggle(articleId);
   };
 
