@@ -38,6 +38,23 @@ export default function AuthModal() {
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" && session?.user) {
+        console.log("[AuthModal] User signed in, closing modal");
+        setOpen(false);
+        setLoginEmail("");
+        setLoginPwd("");
+        setSignupEmail("");
+        setSignupSent(false);
+        setLoginMsg("");
+        setSignupMsg("");
+      }
+    });
+
+    return () => sub?.subscription?.unsubscribe?.();
+  }, []);
+
+  useEffect(() => {
     const onOpen = (e: Event) => {
       const ev = e as CustomEvent<{ tab?: Tab }>;
       setTab(ev.detail?.tab ?? "login");
@@ -75,6 +92,11 @@ export default function AuthModal() {
   );
 
   const signInEmailPassword = async () => {
+    if (!loginEmail.trim() || !loginPwd.trim()) {
+      setLoginMsg("Please enter email and password.");
+      return;
+    }
+
     setLoginBusy(true);
     setLoginMsg("");
     try {
@@ -83,11 +105,11 @@ export default function AuthModal() {
         password: loginPwd,
       });
       if (error) throw error;
-      if (!data?.user) throw new Error("No user");
-      setOpen(false);
-      setLoginEmail("");
-      setLoginPwd("");
+      if (!data?.user) throw new Error("No user returned");
+
+      console.log("[AuthModal] Sign in successful");
     } catch (e: any) {
+      console.error("[AuthModal] Sign in error:", e);
       setLoginMsg(e?.message ?? "Failed to sign in.");
     } finally {
       setLoginBusy(false);
@@ -115,30 +137,68 @@ export default function AuthModal() {
   };
 
   const signInGoogle = async () => {
-    const origin = window.location.origin;
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${origin}/auth/callback` },
-    });
+    try {
+      const origin = window.location.origin;
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${origin}/auth/callback`,
+          queryParams: {
+            access_type: "offline",
+            prompt: "consent",
+          },
+        },
+      });
+      if (error) throw error;
+    } catch (e: any) {
+      console.error("[AuthModal] Google sign in error:", e);
+      setLoginMsg(e?.message ?? "Failed to sign in with Google.");
+    }
   };
 
   const sendSignupLink = async () => {
-    if (!signupEmail.trim()) return;
+    const email = signupEmail.trim();
+    if (!email) {
+      setSignupMsg("Please enter your email address.");
+      return;
+    }
+
+    if (!/\S+@\S+\.\S+/.test(email)) {
+      setSignupMsg("Please enter a valid email address.");
+      return;
+    }
+
     setSignupBusy(true);
     setSignupMsg("");
     try {
       const origin = window.location.origin;
-      const { error } = await supabase.auth.signInWithOtp({
-        email: signupEmail.trim(),
-        options: { emailRedirectTo: `${origin}/auth/callback` },
+      const { data, error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: `${origin}/auth/callback`,
+          shouldCreateUser: true,
+        },
       });
+
       if (error) throw error;
+
       setSignupSent(true);
-      setSignupMsg("Check your email to complete sign-up.");
+      setSignupMsg(
+        "Check your email to complete sign-up. The link will expire in 1 hour."
+      );
+      console.log("[AuthModal] Sign up email sent to:", email);
     } catch (e: any) {
+      console.error("[AuthModal] Sign up error:", e);
       setSignupMsg(e?.message ?? "Failed to send sign-up link.");
     } finally {
       setSignupBusy(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent, action: () => void) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      action();
     }
   };
 
@@ -177,7 +237,12 @@ export default function AuthModal() {
           <div className="mt-3">
             <div className="flex items-center gap-1 p-1 rounded-2xl bg-slate-100">
               <button
-                onClick={() => setTab("login")}
+                onClick={() => {
+                  setTab("login");
+                  setLoginMsg("");
+                  setSignupMsg("");
+                  setSignupSent(false);
+                }}
                 className={`flex-1 px-3 py-1.5 rounded-xl text-xs ${
                   tab === "login" ? "bg-white shadow" : "opacity-70"
                 }`}
@@ -185,7 +250,12 @@ export default function AuthModal() {
                 Login
               </button>
               <button
-                onClick={() => setTab("signup")}
+                onClick={() => {
+                  setTab("signup");
+                  setLoginMsg("");
+                  setSignupMsg("");
+                  setSignupSent(false);
+                }}
                 className={`flex-1 px-3 py-1.5 rounded-xl text-xs ${
                   tab === "signup" ? "bg-white shadow" : "opacity-70"
                 }`}
@@ -205,7 +275,10 @@ export default function AuthModal() {
                     <input
                       value={loginEmail}
                       onChange={(e) => setLoginEmail(e.target.value)}
+                      onKeyDown={(e) => handleKeyDown(e, signInEmailPassword)}
                       placeholder="Email address"
+                      type="email"
+                      autoComplete="email"
                       className="flex-1 outline-none bg-transparent"
                     />
                   </label>
@@ -217,11 +290,14 @@ export default function AuthModal() {
                     <input
                       value={loginPwd}
                       onChange={(e) => setLoginPwd(e.target.value)}
+                      onKeyDown={(e) => handleKeyDown(e, signInEmailPassword)}
                       type={showPwd ? "text" : "password"}
                       placeholder="Password"
+                      autoComplete="current-password"
                       className="flex-1 outline-none bg-transparent"
                     />
                     <button
+                      type="button"
                       onClick={() => setShowPwd((v) => !v)}
                       className="h-7 w-7 grid place-items-center rounded-md hover:bg-slate-100"
                     >
@@ -233,6 +309,7 @@ export default function AuthModal() {
                     </button>
                   </label>
                   <button
+                    type="button"
                     onClick={sendRecovery}
                     className="self-start text-[12px] text-[var(--brand)] hover:opacity-80"
                   >
@@ -260,8 +337,9 @@ export default function AuthModal() {
                 </button>
 
                 <div className="mt-4 text-[12px] text-slate-600">
-                  Don’t have an account?{" "}
+                  Don't have an account?{" "}
                   <button
+                    type="button"
                     onClick={() => setTab("signup")}
                     className="text-[var(--brand)] hover:opacity-80"
                   >
@@ -295,13 +373,21 @@ export default function AuthModal() {
                     <input
                       value={signupEmail}
                       onChange={(e) => setSignupEmail(e.target.value)}
+                      onKeyDown={(e) => handleKeyDown(e, sendSignupLink)}
                       placeholder="Email address"
-                      className="flex-1 outline-none bg-transparent"
+                      type="email"
+                      autoComplete="email"
+                      disabled={signupSent}
+                      className="flex-1 outline-none bg-transparent disabled:opacity-50"
                     />
                   </label>
                 </div>
                 {signupMsg && (
-                  <div className="mt-2 text-[12px] text-slate-700">
+                  <div
+                    className={`mt-2 text-[12px] ${
+                      signupSent ? "text-green-700" : "text-slate-700"
+                    }`}
+                  >
                     {signupMsg}
                   </div>
                 )}
@@ -315,17 +401,37 @@ export default function AuthModal() {
                   ) : (
                     <ArrowRight className="w-4 h-4" />
                   )}
-                  Send sign-up link
+                  {signupSent ? "Email sent!" : "Send sign-up link"}
                 </button>
-                <div className="mt-4 text-[12px] text-slate-600">
-                  Already have an account?{" "}
-                  <button
-                    onClick={() => setTab("login")}
-                    className="text-[var(--brand)] hover:opacity-80"
-                  >
-                    Login
-                  </button>
-                </div>
+
+                {!signupSent && (
+                  <div className="mt-4 text-[12px] text-slate-600">
+                    Already have an account?{" "}
+                    <button
+                      type="button"
+                      onClick={() => setTab("login")}
+                      className="text-[var(--brand)] hover:opacity-80"
+                    >
+                      Login
+                    </button>
+                  </div>
+                )}
+
+                {signupSent && (
+                  <div className="mt-3 text-[11px] text-slate-500">
+                    Didn't receive the email? Check your spam folder or{" "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSignupSent(false);
+                        setSignupMsg("");
+                      }}
+                      className="text-[var(--brand)] hover:opacity-80"
+                    >
+                      try again
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </div>

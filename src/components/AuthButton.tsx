@@ -9,44 +9,122 @@ export default function AuthButton() {
   const seedUid =
     typeof document !== "undefined" ? document.body.dataset.uid || null : null;
 
-  const [ready, setReady] = useState<boolean>(!!seedUid);
-  const [userId, setUserId] = useState<string | null>(seedUid);
+  const [ready, setReady] = useState<boolean>(false);
+  const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
+    let readyTimer: any;
 
-    (async () => {
-      console.log(seedUid);
-      if (!seedUid) {
-        const { data, error } = await supabase.auth.getSession();
-        if (!mounted) return;
-        console.log("[AuthButton] getSession()", {
-          error,
-          user: data?.session?.user?.id ?? null,
-        });
-        setUserId(data?.session?.user?.id ?? null);
-      } else {
-        console.log("[AuthButton] seed from server", { seedUid });
+    console.log("[AuthButton] INIT - Starting auth resolution", {
+      seedUid,
+      timestamp: new Date().toISOString(),
+    });
+
+    const resolveUserFast = async () => {
+      if (seedUid && mounted) {
+        console.log("[AuthButton] STEP 1 - Using seedUid", { seedUid });
+        setUserId(seedUid);
+        setReady(true);
+        return;
       }
-      setReady(true);
-    })();
 
-    const sub = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("[AuthButton] STEP 2 - No seedUid, trying getUser()");
+      const { data: u1, error: e1 } = await supabase.auth.getUser();
+      console.log("[AuthButton] STEP 2 - getUser() result", {
+        userId: u1?.user?.id,
+        error: e1?.message,
+        mounted,
+      });
+
+      if (!mounted) return;
+      if (u1?.user?.id) {
+        console.log("[AuthButton] STEP 2 - SUCCESS - User found via getUser()");
+        setUserId(u1.user.id);
+        setReady(true);
+        return;
+      }
+
+      console.log(
+        "[AuthButton] STEP 3 - getUser() failed, trying getSession()"
+      );
+      const { data: s, error: e2 } = await supabase.auth.getSession();
+      console.log("[AuthButton] STEP 3 - getSession() result", {
+        userId: s?.session?.user?.id,
+        error: e2?.message,
+        mounted,
+      });
+
+      if (!mounted) return;
+      if (s?.session?.user?.id) {
+        console.log(
+          "[AuthButton] STEP 3 - SUCCESS - User found via getSession()"
+        );
+        setUserId(s.session.user.id);
+      } else {
+        console.log("[AuthButton] STEP 3 - FAILED - No user found in session");
+      }
+
+      console.log("[AuthButton] FINAL - Setting ready to true", {
+        finalUserId: s?.session?.user?.id || null,
+      });
+      setReady(true);
+    };
+
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
       const nextId = session?.user?.id ?? null;
-      console.log("[AuthButton] onAuthStateChange", { event, nextId });
+      console.log("[AuthButton] AUTH_STATE_CHANGE", {
+        event,
+        nextId,
+        previousUserId: userId,
+        timestamp: new Date().toISOString(),
+      });
       setUserId(nextId);
       setReady(true);
     });
 
+    readyTimer = setTimeout(() => {
+      if (!mounted) return;
+      console.log("[AuthButton] TIMEOUT - Force setting ready", {
+        currentUserId: userId,
+        timestamp: new Date().toISOString(),
+      });
+      setReady(true);
+    }, 1500);
+
+    const recheck = () => {
+      console.log("[AuthButton] RECHECK - Window focus/visibility change");
+      supabase.auth.getUser().then(({ data, error }) => {
+        if (!mounted) return;
+        console.log("[AuthButton] RECHECK - Result", {
+          userId: data?.user?.id,
+          error: error?.message,
+        });
+        if (data?.user?.id) setUserId(data.user.id);
+      });
+    };
+
+    window.addEventListener("focus", recheck);
+    const vis = () => {
+      if (!document.hidden) recheck();
+    };
+    document.addEventListener("visibilitychange", vis);
+
+    resolveUserFast();
+
     return () => {
+      console.log("[AuthButton] CLEANUP");
       mounted = false;
-      sub.data.subscription.unsubscribe();
+      clearTimeout(readyTimer);
+      sub?.subscription?.unsubscribe?.();
+      window.removeEventListener("focus", recheck);
+      document.removeEventListener("visibilitychange", vis);
     };
   }, [seedUid]);
 
   if (!ready) {
-    return null;
+    return <div className="h-9 w-20 rounded-xl bg-slate-100 animate-pulse" />;
   }
 
   if (!userId) {

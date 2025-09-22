@@ -27,13 +27,27 @@ export default function ScrapButton({
   const onClick = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    const { data } = await supabase.auth.getUser();
-    if (!data.user) {
-      openAuthDialog("login");
-      return;
+
+    try {
+      const { data } = await supabase.auth.getUser();
+      if (!data.user) {
+        console.log(
+          "[ScrapButton] User not authenticated, opening auth dialog"
+        );
+        openAuthDialog("login");
+        return;
+      }
+
+      if (!scrap || !ready) {
+        console.log("[ScrapButton] Scrap context not ready");
+        return;
+      }
+
+      console.log("[ScrapButton] Toggling scrap for article:", articleId);
+      await scrap.toggle(articleId);
+    } catch (error) {
+      console.error("[ScrapButton] Error:", error);
     }
-    if (!scrap) return;
-    await scrap.toggle(articleId);
   };
 
   return (

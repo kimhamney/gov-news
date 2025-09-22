@@ -24,6 +24,7 @@ export default function RepliesPanel({
   const t = useT();
 
   const [userId, setUserId] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [body, setBody] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -35,13 +36,46 @@ export default function RepliesPanel({
   const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
-    supabase.auth
-      .getUser()
-      .then(({ data }) => setUserId(data.user?.id ?? null));
-    const sub = supabase.auth.onAuthStateChange((_e, s) =>
-      setUserId(s?.user?.id ?? null)
-    );
-    return () => sub.data.subscription.unsubscribe();
+    let mounted = true;
+
+    const resolveAuth = async () => {
+      try {
+        const seedUid =
+          typeof document !== "undefined"
+            ? document.body.dataset.uid || null
+            : null;
+
+        if (seedUid && mounted) {
+          setUserId(seedUid);
+          setAuthReady(true);
+          return;
+        }
+
+        const { data } = await supabase.auth.getUser();
+        if (!mounted) return;
+
+        setUserId(data.user?.id ?? null);
+        setAuthReady(true);
+      } catch (error) {
+        console.error("[RepliesPanel] Auth resolution error:", error);
+        if (mounted) setAuthReady(true);
+      }
+    };
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
+      if (!mounted) return;
+      const nextId = s?.user?.id ?? null;
+      console.log("[RepliesPanel] onAuthStateChange", { nextId });
+      setUserId(nextId);
+      setAuthReady(true);
+    });
+
+    resolveAuth();
+
+    return () => {
+      mounted = false;
+      sub.subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -52,15 +86,23 @@ export default function RepliesPanel({
         setLoading(false);
         return;
       }
+
       setLoading(true);
-      const { data } = await supabase
-        .from("replies")
-        .select("id,user_id,article_id,body,created_at")
-        .eq("article_id", articleId)
-        .order("created_at", { ascending: false });
-      if (!mounted) return;
-      setList(((data as Reply[]) ?? []) as Reply[]);
-      setLoading(false);
+      try {
+        const { data } = await supabase
+          .from("replies")
+          .select("id,user_id,article_id,body,created_at")
+          .eq("article_id", articleId)
+          .order("created_at", { ascending: false });
+
+        if (!mounted) return;
+        setList(((data as Reply[]) ?? []) as Reply[]);
+      } catch (error) {
+        console.error("[RepliesPanel] Error loading replies:", error);
+        if (mounted) setList([]);
+      } finally {
+        if (mounted) setLoading(false);
+      }
     };
 
     load();
@@ -80,18 +122,30 @@ export default function RepliesPanel({
     }
   }, [list.length, articleId, onCountChange]);
 
-  const requireLogin = async () => {
-    const { data } = await supabase.auth.getUser();
-    if (!data.user) {
+  const requireLogin = async (): Promise<boolean> => {
+    if (!authReady) return false;
+
+    try {
+      const { data } = await supabase.auth.getUser();
+      if (!data.user) {
+        console.log(
+          "[RepliesPanel] User not authenticated, opening auth dialog"
+        );
+        openAuthDialog("login");
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.error("[RepliesPanel] Auth check error:", error);
       openAuthDialog("login");
       return false;
     }
-    return true;
   };
 
   const submit = async () => {
     if (!(await requireLogin())) return;
     if (!userId) return;
+
     const text = body.trim();
     if (!text) return;
 
@@ -103,29 +157,35 @@ export default function RepliesPanel({
       body: text,
       created_at: new Date().toISOString(),
     };
+
     setList((prev) => [temp, ...prev]);
     setBody("");
 
-    const { data, error } = await supabase
-      .from("replies")
-      .insert({ article_id: articleId, body: text, user_id: userId })
-      .select("id,user_id,article_id,body,created_at")
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from("replies")
+        .insert({ article_id: articleId, body: text, user_id: userId })
+        .select("id,user_id,article_id,body,created_at")
+        .single();
 
-    setSaving(false);
-    if (error || !data) {
+      if (error || !data) throw error;
+
+      setList((prev) =>
+        prev.map((r) => (r.id === temp.id ? (data as Reply) : r))
+      );
+    } catch (error) {
+      console.error("[RepliesPanel] Submit error:", error);
       setList((prev) => prev.filter((r) => r.id !== temp.id));
-      return;
+    } finally {
+      setSaving(false);
     }
-    setList((prev) =>
-      prev.map((r) => (r.id === temp.id ? (data as Reply) : r))
-    );
   };
 
   const beginEdit = (r: Reply) => {
     setEditId(r.id);
     setEditText(r.body);
   };
+
   const cancelEdit = () => {
     setEditId(null);
     setEditText("");
@@ -134,23 +194,34 @@ export default function RepliesPanel({
   const applyEdit = async () => {
     if (!(await requireLogin())) return;
     if (!editId || !userId) return;
+
     const text = editText.trim();
     if (!text) return;
 
     setUpdating(true);
     const prev = list;
+
     setList((cur) =>
       cur.map((r) => (r.id === editId ? { ...r, body: text } : r))
     );
-    const { error } = await supabase
-      .from("replies")
-      .update({ body: text })
-      .eq("id", editId)
-      .eq("user_id", userId);
-    setUpdating(false);
-    setEditId(null);
-    setEditText("");
-    if (error) setList(prev);
+
+    try {
+      const { error } = await supabase
+        .from("replies")
+        .update({ body: text })
+        .eq("id", editId)
+        .eq("user_id", userId);
+
+      if (error) throw error;
+
+      setEditId(null);
+      setEditText("");
+    } catch (error) {
+      console.error("[RepliesPanel] Edit error:", error);
+      setList(prev);
+    } finally {
+      setUpdating(false);
+    }
   };
 
   const removeReply = async (id: string) => {
@@ -160,12 +231,26 @@ export default function RepliesPanel({
 
     const prev = list;
     setList((cur) => cur.filter((r) => r.id !== id));
-    const { error } = await supabase
-      .from("replies")
-      .delete()
-      .eq("id", id)
-      .eq("user_id", userId);
-    if (error) setList(prev);
+
+    try {
+      const { error } = await supabase
+        .from("replies")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", userId);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error("[RepliesPanel] Delete error:", error);
+      setList(prev);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent, action: () => void) => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      action();
+    }
   };
 
   return (
@@ -174,21 +259,26 @@ export default function RepliesPanel({
         <textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
+          onKeyDown={(e) => handleKeyDown(e, submit)}
           onFocus={async (e) => {
+            if (!authReady) return;
             const ok = await requireLogin();
             if (!ok) e.currentTarget.blur();
           }}
           placeholder={t("ui.writeComment")}
           className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-slate-200 min-h-[80px]"
         />
-        <div className="flex justify-end gap-2">
-          <button
-            onClick={submit}
-            disabled={saving}
-            className="px-3 py-1.5 rounded-xl bg-[var(--brand)] text-white text-sm hover:opacity-90 disabled:opacity-60"
-          >
-            {saving ? t("ui.posting") : t("ui.post")}
-          </button>
+        <div className="flex justify-between items-center text-xs text-slate-500">
+          <span>Ctrl+Enter to submit</span>
+          <div className="flex gap-2">
+            <button
+              onClick={submit}
+              disabled={saving || !body.trim()}
+              className="px-3 py-1.5 rounded-xl bg-[var(--brand)] text-white text-sm hover:opacity-90 disabled:opacity-60"
+            >
+              {saving ? t("ui.posting") : t("ui.post")}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -205,22 +295,28 @@ export default function RepliesPanel({
                   <textarea
                     value={editText}
                     onChange={(e) => setEditText(e.target.value)}
+                    onKeyDown={(e) => handleKeyDown(e, applyEdit)}
                     className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-slate-200 min-h-[80px]"
                   />
-                  <div className="flex items-center gap-2 justify-end">
-                    <button
-                      onClick={cancelEdit}
-                      className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 text-sm hover:bg-slate-50"
-                    >
-                      {t("ui.cancel")}
-                    </button>
-                    <button
-                      onClick={applyEdit}
-                      disabled={updating}
-                      className="px-3 py-1.5 rounded-xl bg-[var(--brand)] text-white text-sm hover:opacity-90 disabled:opacity-60"
-                    >
-                      {updating ? t("ui.updating") : t("ui.update")}
-                    </button>
+                  <div className="flex items-center gap-2 justify-between">
+                    <span className="text-xs text-slate-500">
+                      Ctrl+Enter to save
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={cancelEdit}
+                        className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 text-sm hover:bg-slate-50"
+                      >
+                        {t("ui.cancel")}
+                      </button>
+                      <button
+                        onClick={applyEdit}
+                        disabled={updating || !editText.trim()}
+                        className="px-3 py-1.5 rounded-xl bg-[var(--brand)] text-white text-sm hover:opacity-90 disabled:opacity-60"
+                      >
+                        {updating ? t("ui.updating") : t("ui.update")}
+                      </button>
+                    </div>
                   </div>
                 </div>
               ) : (

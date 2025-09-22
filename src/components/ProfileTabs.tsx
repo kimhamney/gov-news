@@ -19,8 +19,9 @@ export default function ProfileTabs() {
     typeof document !== "undefined"
       ? (document.body as any).dataset?.uid || null
       : null;
-  const [authReady, setAuthReady] = useState<boolean>(!!seedUid);
-  const [userId, setUserId] = useState<string | null>(seedUid);
+
+  const [authReady, setAuthReady] = useState<boolean>(false);
+  const [userId, setUserId] = useState<string | null>(null);
 
   const [tab, setTab] = useState<"profile" | "scraps" | "replies">("profile");
   const [email, setEmail] = useState("");
@@ -38,73 +39,99 @@ export default function ProfileTabs() {
 
   useEffect(() => {
     let canceled = false;
-    let readyTimer: any;
 
-    const resolveUserFast = async () => {
+    console.log("[ProfileTabs] INIT - Starting auth resolution", {
+      seedUid,
+      timestamp: new Date().toISOString(),
+    });
+
+    const resolveUserFast = () => {
       if (seedUid && !canceled) {
+        console.log("[ProfileTabs] STEP 1 - Using seedUid", { seedUid });
         setUserId(seedUid);
         setAuthReady(true);
-        return;
+        return true;
       }
-      const { data: u1 } = await supabase.auth.getUser();
-      if (!canceled && u1?.user?.id) {
-        setUserId(u1.user.id);
-        setAuthReady(true);
-        return;
-      }
-      const { data: s } = await supabase.auth.getSession();
-      if (!canceled && s?.session?.user?.id) setUserId(s.session.user.id);
-      if (!canceled) setAuthReady(true);
+      console.log("[ProfileTabs] STEP 1 - No seedUid available");
+      return false;
     };
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (canceled) return;
-      setUserId(session?.user?.id ?? null);
+      const nextId = session?.user?.id ?? null;
+      console.log("[ProfileTabs] AUTH_STATE_CHANGE", {
+        event,
+        nextId,
+        previousUserId: userId,
+        canceled,
+        timestamp: new Date().toISOString(),
+      });
+      setUserId(nextId);
       setAuthReady(true);
     });
 
-    readyTimer = setTimeout(() => {
-      if (!canceled) setAuthReady(true);
-    }, 1500);
+    if (!resolveUserFast()) {
+      console.log(
+        "[ProfileTabs] FALLBACK - No seedUid, waiting for auth state or timeout"
+      );
 
-    const recheck = () => {
-      supabase.auth.getUser().then(({ data }) => {
-        if (!canceled && data?.user?.id) setUserId(data.user.id);
-      });
-    };
-    window.addEventListener("focus", recheck);
-    const vis = () => {
-      if (!document.hidden) recheck();
-    };
-    document.addEventListener("visibilitychange", vis);
-
-    resolveUserFast();
+      setTimeout(() => {
+        if (!canceled) {
+          console.log("[ProfileTabs] TIMEOUT - Setting ready anyway", {
+            currentUserId: userId,
+            timestamp: new Date().toISOString(),
+          });
+          setAuthReady(true);
+        }
+      }, 500);
+    }
 
     return () => {
+      console.log("[ProfileTabs] CLEANUP");
       canceled = true;
-      clearTimeout(readyTimer);
       sub?.subscription?.unsubscribe?.();
-      window.removeEventListener("focus", recheck);
-      document.removeEventListener("visibilitychange", vis);
     };
   }, [seedUid]);
 
   useEffect(() => {
     let active = true;
     const loadProfile = async () => {
-      if (!userId) return;
-      const [{ data: u }, { data: p }] = await Promise.all([
-        supabase.auth.getUser(),
-        supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", userId)
-          .maybeSingle<Profile>(),
-      ]);
-      if (!active) return;
-      setEmail(u.user?.email ?? "");
-      if (p?.nickname) setNickname(p.nickname);
+      if (!userId) {
+        console.log("[ProfileTabs] PROFILE_LOAD - No userId, skipping");
+        return;
+      }
+
+      console.log("[ProfileTabs] PROFILE_LOAD - Starting profile load", {
+        userId,
+      });
+
+      try {
+        const [{ data: u }, { data: p }] = await Promise.all([
+          supabase.auth.getUser(),
+          supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", userId)
+            .maybeSingle<Profile>(),
+        ]);
+
+        console.log("[ProfileTabs] PROFILE_LOAD - Results", {
+          authUser: u.user?.id,
+          profile: p?.nickname || "none",
+          active,
+        });
+
+        if (!active) return;
+
+        setEmail(u.user?.email ?? "");
+        if (p?.nickname) setNickname(p.nickname);
+
+        console.log("[ProfileTabs] PROFILE_LOAD - SUCCESS - Profile data set");
+      } catch (error) {
+        console.error("[ProfileTabs] PROFILE_LOAD - ERROR:", error);
+      }
     };
+
     loadProfile();
     return () => {
       active = false;
@@ -114,33 +141,53 @@ export default function ProfileTabs() {
   useEffect(() => {
     if (!userId || tab !== "scraps") return;
     let active = true;
-    setLoadingScraps(true);
-    supabase
-      .from("scraps")
-      .select("article_id,created_at")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .then(async ({ data }) => {
+
+    const loadScraps = async () => {
+      setLoadingScraps(true);
+
+      try {
+        const { data } = await supabase
+          .from("scraps")
+          .select("article_id,created_at")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false });
+
         if (!active) return;
+
         const ids = (data as ScrapRow[] | null)?.map((s) => s.article_id) ?? [];
         if (ids.length === 0) {
           setScraps([]);
           setLoadingScraps(false);
           return;
         }
+
         const list = await Promise.all(
           ids.map(async (id) => {
-            const r = await fetch(`/api/articles/${encodeURIComponent(id)}`, {
-              headers: { accept: "application/json" },
-            });
-            if (!r.ok) return null;
-            const j = await r.json();
-            return j.item as Article;
+            try {
+              const r = await fetch(`/api/articles/${encodeURIComponent(id)}`, {
+                headers: { accept: "application/json" },
+              });
+              if (!r.ok) return null;
+              const j = await r.json();
+              return j.item as Article;
+            } catch {
+              return null;
+            }
           })
         );
+
+        if (!active) return;
         setScraps(list.filter(Boolean) as Article[]);
-        setLoadingScraps(false);
-      });
+      } catch (error) {
+        console.error("[ProfileTabs] Error loading scraps:", error);
+        setScraps([]);
+      } finally {
+        if (active) setLoadingScraps(false);
+      }
+    };
+
+    loadScraps();
+
     return () => {
       active = false;
     };
@@ -149,17 +196,29 @@ export default function ProfileTabs() {
   useEffect(() => {
     if (!userId || tab !== "replies") return;
     let active = true;
-    setLoadingReplies(true);
-    supabase
-      .from("replies")
-      .select("id,article_id,user_id,body,created_at")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .then(({ data }) => {
+
+    const loadReplies = async () => {
+      setLoadingReplies(true);
+
+      try {
+        const { data } = await supabase
+          .from("replies")
+          .select("id,article_id,user_id,body,created_at")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false });
+
         if (!active) return;
         setReplies((data as any) ?? []);
-        setLoadingReplies(false);
-      });
+      } catch (error) {
+        console.error("[ProfileTabs] Error loading replies:", error);
+        setReplies([]);
+      } finally {
+        if (active) setLoadingReplies(false);
+      }
+    };
+
+    loadReplies();
+
     return () => {
       active = false;
     };
@@ -174,23 +233,35 @@ export default function ProfileTabs() {
     if (!userId) return;
     setError(null);
     setSaving(true);
-    const { error: upErr } = await supabase
-      .from("profiles")
-      .upsert({ id: userId, nickname: nickname.trim(), email: email.trim() });
-    if (upErr) {
-      setError(upErr.message);
+
+    try {
+      const { error: upErr } = await supabase
+        .from("profiles")
+        .upsert({ id: userId, nickname: nickname.trim(), email: email.trim() });
+
+      if (upErr) {
+        setError(upErr.message);
+        return;
+      }
+
+      window.dispatchEvent(new Event("profile:created"));
+    } catch (error: any) {
+      console.error("[ProfileTabs] Save error:", error);
+      setError(error?.message ?? "Failed to save profile");
+    } finally {
       setSaving(false);
-      return;
     }
-    setSaving(false);
-    window.dispatchEvent(new Event("profile:created"));
   };
 
   const signOut = async () => {
-    setUserId(null);
-    await supabase.auth.signOut();
-    await resetFromDb();
-    router.refresh();
+    try {
+      setUserId(null);
+      await supabase.auth.signOut();
+      await resetFromDb();
+      router.refresh();
+    } catch (error) {
+      console.error("[ProfileTabs] Sign out error:", error);
+    }
   };
 
   if (!authReady) {
@@ -202,12 +273,18 @@ export default function ProfileTabs() {
     );
   }
 
-  if (!userId)
+  if (!userId) {
+    console.warn(
+      "[ProfileTabs] No userId but authReady - this should be handled by parent"
+    );
     return (
       <div className="rounded-2xl bg-white border border-slate-100 shadow-card p-6">
-        <div className="text-sm text-slate-600">{t("ui.needSignin")}</div>
+        <div className="text-sm text-slate-600">
+          Loading user information...
+        </div>
       </div>
     );
+  }
 
   return (
     <div className="rounded-3xl bg-white border border-slate-100 shadow-card overflow-hidden">
