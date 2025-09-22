@@ -32,22 +32,22 @@ export default async function HomePage() {
     getServerSupabase(),
   ]);
   const ids = items.map((a) => a.id);
-  const [{ data: userData }, repliesRes, scrapsRes] = await Promise.all([
-    supabase.auth.getUser(),
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const [repliesRes, scrapsRes] = await Promise.all([
     ids.length
       ? supabase.from("replies").select("article_id").in("article_id", ids)
       : Promise.resolve({ data: [] }),
-    supabase.auth
-      .getUser()
-      .then(async ({ data }) =>
-        data.user && ids.length
-          ? supabase
-              .from("scraps")
-              .select("article_id")
-              .eq("user_id", data.user.id)
-              .in("article_id", ids)
-          : { data: [] }
-      ),
+    user && ids.length
+      ? supabase
+          .from("scraps")
+          .select("article_id")
+          .eq("user_id", user.id)
+          .in("article_id", ids)
+      : Promise.resolve({ data: [] }),
   ]);
 
   const counts = new Map<string, number>();
@@ -58,6 +58,7 @@ export default async function HomePage() {
   const initialScrapIds: string[] = (
     ((scrapsRes as any).data ?? []) as Array<{ article_id: string }>
   ).map((x) => x.article_id);
+
   const [featured, ...rest] = items;
 
   return (

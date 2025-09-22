@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useT } from "@/lib/i18n";
 import { useRouter } from "next/navigation";
 import { useScrap } from "@/contexts/ScrapContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 type ScrapRow = { article_id: string; created_at: string };
 
@@ -14,14 +15,7 @@ export default function ProfileTabs() {
   const t = useT();
   const router = useRouter();
   const { resetFromDb } = useScrap();
-
-  const seedUid =
-    typeof document !== "undefined"
-      ? (document.body as any).dataset?.uid || null
-      : null;
-
-  const [authReady, setAuthReady] = useState<boolean>(false);
-  const [userId, setUserId] = useState<string | null>(null);
+  const { userId, loading } = useAuth();
 
   const [tab, setTab] = useState<"profile" | "scraps" | "replies">("profile");
   const [email, setEmail] = useState("");
@@ -38,81 +32,9 @@ export default function ProfileTabs() {
   const [loadingReplies, setLoadingReplies] = useState(false);
 
   useEffect(() => {
-    let canceled = false;
-
-    console.log("[ProfileTabs] INIT - Starting auth resolution", {
-      seedUid,
-      timestamp: new Date().toISOString(),
-    });
-
-    const resolveUserFast = async () => {
-      if (seedUid && !canceled) {
-        console.log("[ProfileTabs] STEP 1 - Using seedUid", { seedUid });
-        setUserId(seedUid);
-        setAuthReady(true);
-        return;
-      }
-
-      console.log(
-        "[ProfileTabs] STEP 2 - No seedUid, trying getUser() as fallback"
-      );
-
-      try {
-        const { data, error } = await supabase.auth.getUser();
-        console.log("[ProfileTabs] STEP 2 - getUser() result", {
-          userId: data?.user?.id,
-          error: error?.message,
-          canceled,
-        });
-
-        if (!canceled) {
-          setUserId(data?.user?.id ?? null);
-          setAuthReady(true);
-        }
-      } catch (error) {
-        console.error("[ProfileTabs] STEP 2 - getUser() error:", error);
-        if (!canceled) {
-          setUserId(null);
-          setAuthReady(true);
-        }
-      }
-    };
-
-    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
-      if (canceled) return;
-      const nextId = session?.user?.id ?? null;
-      console.log("[ProfileTabs] AUTH_STATE_CHANGE", {
-        event,
-        nextId,
-        previousUserId: userId,
-        canceled,
-        timestamp: new Date().toISOString(),
-      });
-      setUserId(nextId);
-      setAuthReady(true);
-    });
-
-    resolveUserFast();
-
-    return () => {
-      console.log("[ProfileTabs] CLEANUP");
-      canceled = true;
-      sub?.subscription?.unsubscribe?.();
-    };
-  }, [seedUid]);
-
-  useEffect(() => {
     let active = true;
     const loadProfile = async () => {
-      if (!userId) {
-        console.log("[ProfileTabs] PROFILE_LOAD - No userId, skipping");
-        return;
-      }
-
-      console.log("[ProfileTabs] PROFILE_LOAD - Starting profile load", {
-        userId,
-      });
-
+      if (!userId) return;
       try {
         const [{ data: u }, { data: p }] = await Promise.all([
           supabase.auth.getUser(),
@@ -122,24 +44,11 @@ export default function ProfileTabs() {
             .eq("id", userId)
             .maybeSingle<Profile>(),
         ]);
-
-        console.log("[ProfileTabs] PROFILE_LOAD - Results", {
-          authUser: u.user?.id,
-          profile: p?.nickname || "none",
-          active,
-        });
-
         if (!active) return;
-
         setEmail(u.user?.email ?? "");
         if (p?.nickname) setNickname(p.nickname);
-
-        console.log("[ProfileTabs] PROFILE_LOAD - SUCCESS - Profile data set");
-      } catch (error) {
-        console.error("[ProfileTabs] PROFILE_LOAD - ERROR:", error);
-      }
+      } catch {}
     };
-
     loadProfile();
     return () => {
       active = false;
@@ -149,26 +58,21 @@ export default function ProfileTabs() {
   useEffect(() => {
     if (!userId || tab !== "scraps") return;
     let active = true;
-
     const loadScraps = async () => {
       setLoadingScraps(true);
-
       try {
         const { data } = await supabase
           .from("scraps")
           .select("article_id,created_at")
           .eq("user_id", userId)
           .order("created_at", { ascending: false });
-
         if (!active) return;
-
         const ids = (data as ScrapRow[] | null)?.map((s) => s.article_id) ?? [];
-        if (ids.length === 0) {
+        if (!ids.length) {
           setScraps([]);
           setLoadingScraps(false);
           return;
         }
-
         const list = await Promise.all(
           ids.map(async (id) => {
             try {
@@ -183,19 +87,15 @@ export default function ProfileTabs() {
             }
           })
         );
-
         if (!active) return;
         setScraps(list.filter(Boolean) as Article[]);
-      } catch (error) {
-        console.error("[ProfileTabs] Error loading scraps:", error);
+      } catch {
         setScraps([]);
       } finally {
         if (active) setLoadingScraps(false);
       }
     };
-
     loadScraps();
-
     return () => {
       active = false;
     };
@@ -204,29 +104,23 @@ export default function ProfileTabs() {
   useEffect(() => {
     if (!userId || tab !== "replies") return;
     let active = true;
-
     const loadReplies = async () => {
       setLoadingReplies(true);
-
       try {
         const { data } = await supabase
           .from("replies")
           .select("id,article_id,user_id,body,created_at")
           .eq("user_id", userId)
           .order("created_at", { ascending: false });
-
         if (!active) return;
         setReplies((data as any) ?? []);
-      } catch (error) {
-        console.error("[ProfileTabs] Error loading replies:", error);
+      } catch {
         setReplies([]);
       } finally {
         if (active) setLoadingReplies(false);
       }
     };
-
     loadReplies();
-
     return () => {
       active = false;
     };
@@ -241,20 +135,16 @@ export default function ProfileTabs() {
     if (!userId) return;
     setError(null);
     setSaving(true);
-
     try {
       const { error: upErr } = await supabase
         .from("profiles")
         .upsert({ id: userId, nickname: nickname.trim(), email: email.trim() });
-
       if (upErr) {
         setError(upErr.message);
         return;
       }
-
       window.dispatchEvent(new Event("profile:created"));
     } catch (error: any) {
-      console.error("[ProfileTabs] Save error:", error);
       setError(error?.message ?? "Failed to save profile");
     } finally {
       setSaving(false);
@@ -263,16 +153,13 @@ export default function ProfileTabs() {
 
   const signOut = async () => {
     try {
-      setUserId(null);
-      await supabase.auth.signOut();
       await resetFromDb();
+      await supabase.auth.signOut();
       router.refresh();
-    } catch (error) {
-      console.error("[ProfileTabs] Sign out error:", error);
-    }
+    } catch {}
   };
 
-  if (!authReady) {
+  if (loading) {
     return (
       <div className="rounded-2xl bg-white border border-slate-100 shadow-card p-6">
         <div className="h-4 w-28 bg-slate-100 rounded animate-pulse mb-4" />
@@ -282,9 +169,6 @@ export default function ProfileTabs() {
   }
 
   if (!userId) {
-    console.warn(
-      "[ProfileTabs] No userId but authReady - this should be handled by parent"
-    );
     return (
       <div className="rounded-2xl bg-white border border-slate-100 shadow-card p-6">
         <div className="text-sm text-slate-600">
@@ -336,7 +220,7 @@ export default function ProfileTabs() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <label className="block">
               <span className="block text-xs text-slate-600 mb-1">
-                {t("ui.nickname")}
+                Nickname
               </span>
               <input
                 value={nickname}
@@ -345,9 +229,7 @@ export default function ProfileTabs() {
               />
             </label>
             <label className="block">
-              <span className="block text-xs text-slate-600 mb-1">
-                {t("ui.email")}
-              </span>
+              <span className="block text-xs text-slate-600 mb-1">Email</span>
               <input
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -362,7 +244,7 @@ export default function ProfileTabs() {
               disabled={disabled}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--brand)] text-white text-sm hover:opacity-90 disabled:opacity-60"
             >
-              {saving ? t("ui.saving") : t("ui.save")}
+              Save
             </button>
             <button
               onClick={signOut}
@@ -377,10 +259,10 @@ export default function ProfileTabs() {
       {tab === "scraps" && (
         <div className="p-6">
           {loadingScraps && (
-            <div className="text-sm text-slate-600">{t("ui.loading")}</div>
+            <div className="text-sm text-slate-600">Loading...</div>
           )}
           {!loadingScraps && scraps.length === 0 && (
-            <div className="text-sm text-slate-600">{t("ui.noScraps")}</div>
+            <div className="text-sm text-slate-600">No scraps</div>
           )}
           {!loadingScraps && scraps.length > 0 && (
             <ul className="grid gap-3 list-none p-0 m-0">
@@ -425,10 +307,10 @@ export default function ProfileTabs() {
       {tab === "replies" && (
         <div className="p-6 space-y-3">
           {loadingReplies && (
-            <div className="text-sm text-slate-600">{t("ui.loading")}</div>
+            <div className="text-sm text-slate-600">Loading...</div>
           )}
           {!loadingReplies && replies.length === 0 && (
-            <div className="text-sm text-slate-600">{t("ui.noComments")}</div>
+            <div className="text-sm text-slate-600">No comments</div>
           )}
           {!loadingReplies &&
             replies.map((r) => <ReplyItem key={r.id} r={r} />)}

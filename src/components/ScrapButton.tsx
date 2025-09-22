@@ -1,9 +1,9 @@
 "use client";
 import { useMemo } from "react";
 import { Bookmark, BookmarkCheck } from "lucide-react";
-import { supabase } from "@/lib/supabaseClient";
 import { openAuthDialog } from "@/components/AuthModal";
 import { useScrapSafe } from "@/contexts/ScrapContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function ScrapButton({
   articleId,
@@ -14,6 +14,7 @@ export default function ScrapButton({
   size?: "sm" | "md" | "lg";
   className?: string;
 }) {
+  const { isAuthenticated } = useAuth();
   const scrap = useScrapSafe();
   const ready = !!scrap?.ready;
   const active = ready && scrap!.isScrapped(articleId);
@@ -27,27 +28,12 @@ export default function ScrapButton({
   const onClick = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-
-    try {
-      const { data } = await supabase.auth.getUser();
-      if (!data.user) {
-        console.log(
-          "[ScrapButton] User not authenticated, opening auth dialog"
-        );
-        openAuthDialog("login");
-        return;
-      }
-
-      if (!scrap || !ready) {
-        console.log("[ScrapButton] Scrap context not ready");
-        return;
-      }
-
-      console.log("[ScrapButton] Toggling scrap for article:", articleId);
-      await scrap.toggle(articleId);
-    } catch (error) {
-      console.error("[ScrapButton] Error:", error);
+    if (!isAuthenticated) {
+      openAuthDialog("login");
+      return;
     }
+    if (!scrap || !ready) return;
+    await scrap.toggle(articleId);
   };
 
   return (

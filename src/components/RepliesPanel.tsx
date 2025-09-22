@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useT } from "@/lib/i18n";
 import { openAuthDialog } from "@/components/AuthModal";
+import { useAuth } from "@/contexts/AuthContext";
 
 type Reply = {
   id: string;
@@ -22,9 +23,8 @@ export default function RepliesPanel({
   onCountChange?: (n: number) => void;
 }) {
   const t = useT();
+  const { userId, isAuthenticated } = useAuth();
 
-  const [userId, setUserId] = useState<string | null>(null);
-  const [authReady, setAuthReady] = useState(false);
   const [body, setBody] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -37,56 +37,11 @@ export default function RepliesPanel({
 
   useEffect(() => {
     let mounted = true;
-
-    const resolveAuth = async () => {
-      try {
-        const seedUid =
-          typeof document !== "undefined"
-            ? document.body.dataset.uid || null
-            : null;
-
-        if (seedUid && mounted) {
-          setUserId(seedUid);
-          setAuthReady(true);
-          return;
-        }
-
-        const { data } = await supabase.auth.getUser();
-        if (!mounted) return;
-
-        setUserId(data.user?.id ?? null);
-        setAuthReady(true);
-      } catch (error) {
-        console.error("[RepliesPanel] Auth resolution error:", error);
-        if (mounted) setAuthReady(true);
-      }
-    };
-
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
-      if (!mounted) return;
-      const nextId = s?.user?.id ?? null;
-      console.log("[RepliesPanel] onAuthStateChange", { nextId });
-      setUserId(nextId);
-      setAuthReady(true);
-    });
-
-    resolveAuth();
-
-    return () => {
-      mounted = false;
-      sub.subscription.unsubscribe();
-    };
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
-
     const load = async () => {
       if (initialList.length > 0) {
         setLoading(false);
         return;
       }
-
       setLoading(true);
       try {
         const { data } = await supabase
@@ -94,17 +49,14 @@ export default function RepliesPanel({
           .select("id,user_id,article_id,body,created_at")
           .eq("article_id", articleId)
           .order("created_at", { ascending: false });
-
         if (!mounted) return;
         setList(((data as Reply[]) ?? []) as Reply[]);
-      } catch (error) {
-        console.error("[RepliesPanel] Error loading replies:", error);
+      } catch {
         if (mounted) setList([]);
       } finally {
         if (mounted) setLoading(false);
       }
     };
-
     load();
     return () => {
       mounted = false;
@@ -122,30 +74,17 @@ export default function RepliesPanel({
     }
   }, [list.length, articleId, onCountChange]);
 
-  const requireLogin = async (): Promise<boolean> => {
-    if (!authReady) return false;
-
-    try {
-      const { data } = await supabase.auth.getUser();
-      if (!data.user) {
-        console.log(
-          "[RepliesPanel] User not authenticated, opening auth dialog"
-        );
-        openAuthDialog("login");
-        return false;
-      }
-      return true;
-    } catch (error) {
-      console.error("[RepliesPanel] Auth check error:", error);
+  const requireLogin = (): boolean => {
+    if (!isAuthenticated) {
       openAuthDialog("login");
       return false;
     }
+    return true;
   };
 
   const submit = async () => {
-    if (!(await requireLogin())) return;
+    if (!requireLogin()) return;
     if (!userId) return;
-
     const text = body.trim();
     if (!text) return;
 
@@ -157,7 +96,6 @@ export default function RepliesPanel({
       body: text,
       created_at: new Date().toISOString(),
     };
-
     setList((prev) => [temp, ...prev]);
     setBody("");
 
@@ -167,14 +105,11 @@ export default function RepliesPanel({
         .insert({ article_id: articleId, body: text, user_id: userId })
         .select("id,user_id,article_id,body,created_at")
         .single();
-
       if (error || !data) throw error;
-
       setList((prev) =>
         prev.map((r) => (r.id === temp.id ? (data as Reply) : r))
       );
-    } catch (error) {
-      console.error("[RepliesPanel] Submit error:", error);
+    } catch {
       setList((prev) => prev.filter((r) => r.id !== temp.id));
     } finally {
       setSaving(false);
@@ -192,15 +127,13 @@ export default function RepliesPanel({
   };
 
   const applyEdit = async () => {
-    if (!(await requireLogin())) return;
+    if (!requireLogin()) return;
     if (!editId || !userId) return;
-
     const text = editText.trim();
     if (!text) return;
 
     setUpdating(true);
     const prev = list;
-
     setList((cur) =>
       cur.map((r) => (r.id === editId ? { ...r, body: text } : r))
     );
@@ -211,13 +144,10 @@ export default function RepliesPanel({
         .update({ body: text })
         .eq("id", editId)
         .eq("user_id", userId);
-
       if (error) throw error;
-
       setEditId(null);
       setEditText("");
-    } catch (error) {
-      console.error("[RepliesPanel] Edit error:", error);
+    } catch {
       setList(prev);
     } finally {
       setUpdating(false);
@@ -225,23 +155,20 @@ export default function RepliesPanel({
   };
 
   const removeReply = async (id: string) => {
-    if (!(await requireLogin())) return;
+    if (!requireLogin()) return;
     if (!userId) return;
     if (!window.confirm(t("ui.confirmDelete"))) return;
 
     const prev = list;
     setList((cur) => cur.filter((r) => r.id !== id));
-
     try {
       const { error } = await supabase
         .from("replies")
         .delete()
         .eq("id", id)
         .eq("user_id", userId);
-
       if (error) throw error;
-    } catch (error) {
-      console.error("[RepliesPanel] Delete error:", error);
+    } catch {
       setList(prev);
     }
   };
@@ -260,10 +187,11 @@ export default function RepliesPanel({
           value={body}
           onChange={(e) => setBody(e.target.value)}
           onKeyDown={(e) => handleKeyDown(e, submit)}
-          onFocus={async (e) => {
-            if (!authReady) return;
-            const ok = await requireLogin();
-            if (!ok) e.currentTarget.blur();
+          onFocus={(e) => {
+            if (!isAuthenticated) {
+              openAuthDialog("login");
+              e.currentTarget.blur();
+            }
           }}
           placeholder={t("ui.writeComment")}
           className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-slate-200 min-h-[80px]"

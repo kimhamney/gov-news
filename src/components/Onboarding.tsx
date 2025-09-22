@@ -3,13 +3,15 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { Profile } from "@/types/profile";
 import { useT } from "@/lib/i18n";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Onboarding() {
   const t = useT();
+  const { userId } = useAuth();
+
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const [userId, setUserId] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [nickname, setNickname] = useState("");
 
@@ -21,87 +23,37 @@ export default function Onboarding() {
 
   useEffect(() => {
     let mounted = true;
-
     const boot = async () => {
       try {
-        const seedUid =
-          typeof document !== "undefined"
-            ? document.body.dataset.uid || null
-            : null;
-
-        let currentUser = null;
-
-        if (seedUid) {
-          const { data } = await supabase.auth.getUser();
-          currentUser = data.user;
-        } else {
-          const { data } = await supabase.auth.getUser();
-          currentUser = data.user;
-        }
-
-        if (!mounted) return;
-
-        if (!currentUser) {
+        if (!userId) {
           setOpen(false);
           setLoading(false);
           return;
         }
-
-        setUserId(currentUser.id);
-        setEmail(currentUser.email ?? "");
+        const u = await supabase.auth.getUser();
+        if (!mounted) return;
+        setEmail(u.data.user?.email ?? "");
 
         const { data: profile } = await supabase
           .from("profiles")
           .select("*")
-          .eq("id", currentUser.id)
+          .eq("id", userId)
           .maybeSingle<Profile>();
-
         if (!mounted) return;
-
         setOpen(!profile);
         setLoading(false);
-      } catch (error) {
-        console.error("[Onboarding] Boot error:", error);
+      } catch {
         if (mounted) {
           setOpen(false);
           setLoading(false);
         }
       }
     };
-
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
-      if (!mounted) return;
-
-      const u = s?.user;
-      if (!u) {
-        setOpen(false);
-        setUserId(null);
-        return;
-      }
-
-      console.log("[Onboarding] Auth state changed:", u.id);
-      setUserId(u.id);
-      setEmail(u.email ?? "");
-
-      if (!loading) {
-        supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", u.id)
-          .maybeSingle<Profile>()
-          .then(({ data: profile }) => {
-            if (mounted) setOpen(!profile);
-          });
-      }
-    });
-
     boot();
-
     return () => {
       mounted = false;
-      sub?.subscription?.unsubscribe?.();
     };
-  }, [loading]);
+  }, [userId]);
 
   const submit = async () => {
     if (!userId) return;
@@ -114,24 +66,20 @@ export default function Onboarding() {
       setError("Please enter a nickname of 2–20 characters.");
       return;
     }
-
     if (!em || !/\S+@\S+\.\S+/.test(em)) {
       setError("Please enter a valid email address.");
       return;
     }
-
     if (pwd1.length < 6) {
       setError("Password must be at least 6 characters.");
       return;
     }
-
     if (pwd1 !== pwd2) {
       setError("Passwords do not match.");
       return;
     }
 
     setSaving(true);
-
     try {
       if (pwd1) {
         const { error: pwdError } = await supabase.auth.updateUser({
@@ -139,26 +87,20 @@ export default function Onboarding() {
         });
         if (pwdError) throw pwdError;
       }
-
       if (em !== email) {
         const { error: emailError } = await supabase.auth.updateUser({
           email: em,
         });
         if (emailError) throw emailError;
       }
-
       const { error: profileError } = await supabase
         .from("profiles")
         .insert({ id: userId, nickname: nk, email: em });
-
       if (profileError) throw profileError;
 
-      console.log("[Onboarding] Profile created successfully");
       setOpen(false);
       window.dispatchEvent(new Event("profile:created"));
     } catch (error: any) {
-      console.error("[Onboarding] Submit error:", error);
-
       let errorMsg = "Failed to create profile. Please try again.";
       if (error?.message) {
         if (
@@ -172,7 +114,6 @@ export default function Onboarding() {
           errorMsg = error.message;
         }
       }
-
       setError(errorMsg);
     } finally {
       setSaving(false);

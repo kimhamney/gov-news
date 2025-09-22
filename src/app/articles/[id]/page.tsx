@@ -13,26 +13,24 @@ export default async function ArticlePage({
   const id = (resolved as any)?.id;
   const base = await getBaseUrl();
 
-  const [itemRes, supabase] = await Promise.all([
-    fetch(`${base}/api/articles/${encodeURIComponent(id ?? "")}`, {
+  const itemRes = await fetch(
+    `${base}/api/articles/${encodeURIComponent(id ?? "")}`,
+    {
       cache: "no-store",
       headers: { accept: "application/json" },
-    }),
-    getServerSupabase(),
-  ]);
+    }
+  );
   if (!id || !itemRes.ok)
     return <main className="mx-auto max-w-5xl p-4">Not found</main>;
 
   const { item } = (await itemRes.json()) as { item: Article };
 
-  const [{ data: _user }, repliesRes] = await Promise.all([
-    supabase.auth.getUser(),
-    supabase
-      .from("replies")
-      .select("id,user_id,article_id,body,created_at")
-      .eq("article_id", id)
-      .order("created_at", { ascending: false }),
-  ]);
+  const supabase = await getServerSupabase();
+  const repliesRes = await supabase
+    .from("replies")
+    .select("id,user_id,article_id,body,created_at")
+    .eq("article_id", id)
+    .order("created_at", { ascending: false });
 
   const initialReplies = (repliesRes.data as any[]) ?? [];
 
