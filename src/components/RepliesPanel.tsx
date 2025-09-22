@@ -283,7 +283,7 @@ export default function RepliesPanel({
       </div>
 
       {loading ? (
-        <div className="text-sm text-slate-600">{t("ui.loading")}</div>
+        <div className="text-sm text-slate-600">{t("ui.noComments")}</div>
       ) : list.length === 0 ? (
         <div className="text-sm text-slate-600">{t("ui.noComments")}</div>
       ) : (

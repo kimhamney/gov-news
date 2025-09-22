@@ -3,7 +3,7 @@
 export function CardSkeleton() {
   return (
     <li
-      className="relative overflow-hidden rounded-2xl border bg-white/90 backdrop-blur p-3 md:p-4 animate-pulse"
+      className="col-span-full relative overflow-hidden rounded-2xl border bg-white/90 backdrop-blur p-3 md:p-4 animate-pulse"
       style={{ borderColor: "var(--line)" }}
     >
       <div
@@ -21,6 +21,16 @@ export function CardSkeleton() {
         </div>
       </div>
     </li>
+  );
+}
+
+export function ListSkeleton({ count = 5 }: { count?: number }) {
+  return (
+    <ul className="flex flex-col gap-3">
+      {Array.from({ length: count }).map((_, i) => (
+        <CardSkeleton key={i} />
+      ))}
+    </ul>
   );
 }
 
@@ -84,24 +94,24 @@ export function ProfileSkeleton() {
   return (
     <div className="rounded-3xl bg-white border border-slate-100 shadow-card overflow-hidden">
       <div className="px-4 pt-3 border-b border-slate-100">
-        <div className="flex gap-6">
-          <div className="h-9 w-16 rounded bg-slate-100" />
-          <div className="h-9 w-16 rounded bg-slate-100/70" />
-          <div className="h-9 w-24 rounded bg-slate-100/70" />
+        <div className="flex gap-2">
+          <div className="h-8 w-20 rounded-full bg-slate-100" />
+          <div className="h-8 w-20 rounded-full bg-slate-100/80" />
+          <div className="h-8 w-24 rounded-full bg-slate-100/60" />
         </div>
       </div>
-      <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4 animate-pulse">
+      <div className="p-6 flex flex-col gap-4 animate-pulse">
         <div className="space-y-2">
-          <div className="h-3 w-20 bg-slate-100 rounded" />
+          <div className="h-3 w-28 bg-slate-100 rounded" />
           <div className="h-10 w-full bg-slate-100 rounded-xl" />
         </div>
         <div className="space-y-2">
-          <div className="h-3 w-16 bg-slate-100 rounded" />
+          <div className="h-3 w-24 bg-slate-100 rounded" />
           <div className="h-10 w-full bg-slate-100 rounded-xl" />
         </div>
-        <div className="col-span-full flex items-center gap-3">
-          <div className="h-9 w-24 bg-slate-100 rounded-xl" />
-          <div className="h-9 w-24 bg-slate-100 rounded-xl" />
+        <div className="flex gap-3">
+          <div className="h-9 w-28 bg-slate-100 rounded-xl" />
+          <div className="h-9 w-28 bg-slate-100 rounded-xl" />
         </div>
       </div>
     </div>
