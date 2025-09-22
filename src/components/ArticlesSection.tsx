@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import ArticleCard from "@/components/ArticleCard";
 import type { Article } from "@/types/article";
 import { useLocaleMode } from "@/lib/localePref";
+import { ArrowUp } from "lucide-react";
 
 const PAGE_SIZE = 5;
 
@@ -145,10 +146,10 @@ export default function ArticlesSection({
         <button
           onClick={scrollToTop}
           aria-label="Scroll to top"
-          className="fixed bottom-6 right-6 h-10 w-10 rounded-full shadow-lg bg-white/90 backdrop-blur border border-slate-200 hover:shadow-xl transition grid place-items-center"
+          className="fixed bottom-16 right-6 h-9 w-9 rounded-xl bg-white/80 backdrop-blur-sm border border-slate-200 shadow hover:shadow-md hover:scale-110 transition-transform grid place-items-center z-50"
           title={mode === "ko" ? "맨 위로" : "Back to top"}
         >
-          ↑
+          <ArrowUp className="w-4 h-4 text-slate-700" />
         </button>
       )}
     </section>

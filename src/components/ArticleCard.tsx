@@ -164,7 +164,10 @@ export default function ArticleCard({
   }
 
   return (
-    <li className="relative p-0 overflow-hidden rounded-2xl hover:shadow-md transition">
+    <li
+      className="relative p-0 overflow-hidden rounded-2xl border bg-white/90 backdrop-blur hover:shadow-md transition"
+      style={{ borderColor: "var(--line)" }}
+    >
       <div className="absolute right-3 top-3 z-10">
         <ScrapButton articleId={a.id} size="sm" />
       </div>
