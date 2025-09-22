@@ -5,6 +5,7 @@ import { LocaleProvider, Mode } from "@/lib/localePref";
 import { cookies } from "next/headers";
 import { getServerSupabase } from "@/lib/supabaseServer";
 import { ScrapProvider } from "@/contexts/ScrapContext";
+import { AuthProvider } from "@/contexts/AuthContext";
 import Onboarding from "@/components/Onboarding";
 
 export const metadata = { title: "GOVNEWS" };
@@ -27,12 +28,14 @@ export default async function RootLayout({
     <html lang="en">
       <body data-uid={user?.id ?? ""}>
         <LocaleProvider initialMode={initialMode}>
-          <ScrapProvider>
-            <TopBar />
-            {children}
-            <GlobalLocaleSwitcher />
-            <Onboarding />
-          </ScrapProvider>
+          <AuthProvider>
+            <ScrapProvider>
+              <TopBar />
+              {children}
+              <GlobalLocaleSwitcher />
+              <Onboarding />
+            </ScrapProvider>
+          </AuthProvider>
         </LocaleProvider>
       </body>
     </html>

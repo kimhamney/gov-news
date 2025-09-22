@@ -45,15 +45,37 @@ export default function ProfileTabs() {
       timestamp: new Date().toISOString(),
     });
 
-    const resolveUserFast = () => {
+    const resolveUserFast = async () => {
       if (seedUid && !canceled) {
         console.log("[ProfileTabs] STEP 1 - Using seedUid", { seedUid });
         setUserId(seedUid);
         setAuthReady(true);
-        return true;
+        return;
       }
-      console.log("[ProfileTabs] STEP 1 - No seedUid available");
-      return false;
+
+      console.log(
+        "[ProfileTabs] STEP 2 - No seedUid, trying getUser() as fallback"
+      );
+
+      try {
+        const { data, error } = await supabase.auth.getUser();
+        console.log("[ProfileTabs] STEP 2 - getUser() result", {
+          userId: data?.user?.id,
+          error: error?.message,
+          canceled,
+        });
+
+        if (!canceled) {
+          setUserId(data?.user?.id ?? null);
+          setAuthReady(true);
+        }
+      } catch (error) {
+        console.error("[ProfileTabs] STEP 2 - getUser() error:", error);
+        if (!canceled) {
+          setUserId(null);
+          setAuthReady(true);
+        }
+      }
     };
 
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
@@ -70,21 +92,7 @@ export default function ProfileTabs() {
       setAuthReady(true);
     });
 
-    if (!resolveUserFast()) {
-      console.log(
-        "[ProfileTabs] FALLBACK - No seedUid, waiting for auth state or timeout"
-      );
-
-      setTimeout(() => {
-        if (!canceled) {
-          console.log("[ProfileTabs] TIMEOUT - Setting ready anyway", {
-            currentUserId: userId,
-            timestamp: new Date().toISOString(),
-          });
-          setAuthReady(true);
-        }
-      }, 500);
-    }
+    resolveUserFast();
 
     return () => {
       console.log("[ProfileTabs] CLEANUP");
